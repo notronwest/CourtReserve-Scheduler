@@ -180,9 +180,9 @@ def recommend(
         if item_dt.strftime("%Y-%m-%d") != date_str:
             continue
         name = (item.get("EventName") or item.get("ReservationType") or "").lower()
-        # Match in reverse-specificity order so "Advanced Intermediate" is
-        # detected before "Intermediate", "Advanced Beginner" before "Beginner"
-        for level in reversed(LEVEL_ORDER):
+        # Match longest level name first so "Advanced Intermediate" is detected
+        # before "Advanced", and "Advanced Beginner" before "Beginner".
+        for level in sorted(LEVEL_ORDER, key=len, reverse=True):
             if level.lower() in name:
                 level_counts[level] += 1
                 break
@@ -279,10 +279,19 @@ def recommend(
         levels_covered.add(APPROVED_EVENTS[eid]["level"])
 
     # Constraint 4 — Pass 1: ensure all 5 levels are represented.
+    # Skip levels already saturated by existing events (configurable threshold).
     # For each missing level rank available slots by historical popularity so
     # we place the event in the time band where it has drawn best attendance.
+    saturation_threshold = (
+        policy["hard_constraints"]["4_required_level_coverage"].get("saturation_threshold", 2)
+    )
+
     for level in LEVEL_ORDER:
         if level in levels_covered:
+            continue
+        # Skip if this level is already well-covered by existing events
+        if saturation_threshold > 0 and level_counts.get(level, 0) >= saturation_threshold:
+            levels_covered.add(level)  # count as covered — no new rec needed
             continue
         eid = LEVEL_TO_EVENT_ID[level]
         if event_counts[eid] >= max_occ:

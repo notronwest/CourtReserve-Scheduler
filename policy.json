@@ -95,8 +95,10 @@
     },
     "4_required_level_coverage": {
       "enabled": true,
-      "description": "Recommendations must collectively include all five levels when possible.",
-      "levels": ["Beginner", "Advanced Beginner", "Intermediate", "Advanced Intermediate", "Advanced"]
+      "description": "Recommendations must collectively include all five levels when possible. Levels already well-covered by existing events are skipped.",
+      "levels": ["Beginner", "Advanced Beginner", "Intermediate", "Advanced Intermediate", "Advanced"],
+      "saturation_threshold": 2,
+      "saturation_threshold_note": "If a level already has this many sessions on the target day (across all events, not just approved ones), it is considered covered and will not be forced in Pass 1. Set to 0 to always force all levels."
     },
     "5_utilization_optimization": {
       "enabled": true,

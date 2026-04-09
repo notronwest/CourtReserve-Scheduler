@@ -33,21 +33,34 @@ def login(page: Page):
 
 @contextmanager
 def browser_session(headless: bool = False):  # headless=True breaks Cloudflare — always use False
-    """Context manager that yields a logged-in Playwright page."""
-    with sync_playwright() as p:
-        browser: Browser = p.chromium.launch(
-            channel="chrome",
-            headless=headless,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        context = browser.new_context()
-        page = context.new_page()
-        Stealth().apply_stealth_sync(page)
-        login(page)
-        try:
-            yield page
-        finally:
-            browser.close()
+    """Context manager that yields a logged-in Playwright page.
+
+    Uses a dedicated Chrome user-data-dir so this instance is fully isolated
+    from the user's normal Chrome windows — no interference, no accidental
+    closures, no shared session state.
+    """
+    import tempfile, shutil
+    # Temporary profile dir — fresh each run, cleaned up on exit
+    profile_dir = tempfile.mkdtemp(prefix="cr_scheduler_chrome_")
+    try:
+        with sync_playwright() as p:
+            # launch_persistent_context gives an isolated profile — completely
+            # separate from the user's normal Chrome windows
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=profile_dir,
+                channel="chrome",
+                headless=headless,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            page = context.new_page()
+            Stealth().apply_stealth_sync(page)
+            login(page)
+            try:
+                yield page
+            finally:
+                context.close()
+    finally:
+        shutil.rmtree(profile_dir, ignore_errors=True)
 
 
 def dedup_schedule(items: list[dict]) -> list[dict]:
