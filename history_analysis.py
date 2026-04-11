@@ -3,10 +3,17 @@ Analyses the locally-stored historical reservations data to produce
 popularity scores used by the recommender.
 
 A popularity score is the average MembersCount for a given
-(event_id, day_of_week, time_band) combination over the history window.
+(canonical_event_id, day_of_week, time_band) combination.
 
-Falls back gracefully when no history file is present — every score
-returns 0.0 so the recommender runs unchanged.
+Event matching uses two strategies (in order):
+  1. Exact EventId match against our 5 approved event IDs.
+  2. Title-based match: detect the skill level from the event name,
+     then map to the canonical approved event ID for that level.
+     Only events whose names contain "open play" are matched this way —
+     lessons, ratings sessions, contract times, and private bookings
+     are excluded.
+
+Falls back gracefully when no history file is present.
 """
 
 import json
@@ -17,19 +24,70 @@ from typing import NamedTuple
 
 HISTORY_FILE = Path(__file__).parent / "history" / "history_latest.json"
 
-# Time bands must match policy.json / recommender.py
+# 2-hour time bands aligned to our 2-hour event blocks.
+# Finer granularity lets us distinguish 8 AM from 10 AM in history.
 TIME_BANDS = [
-    ("morning",   6,  12),
-    ("midday",   12,  15),
-    ("afternoon", 15, 18),
-    ("evening",  18,  24),
+    ("0600",  6,  8),
+    ("0800",  8, 10),
+    ("1000", 10, 12),
+    ("1200", 12, 14),
+    ("1400", 14, 16),
+    ("1600", 16, 18),
+    ("1800", 18, 20),
+    ("2000", 20, 24),
 ]
+
+# Canonical approved event IDs (must stay in sync with recommender.py)
+APPROVED_EVENT_IDS = {
+    1717147: "Beginner",
+    1717131: "Advanced Beginner",
+    1931656: "Intermediate",
+    1672774: "Advanced Intermediate",
+    1633147: "Advanced",
+}
+
+# Reverse map: level name → canonical event ID
+_LEVEL_TO_ID = {v: k for k, v in APPROVED_EVENT_IDS.items()}
+
+# Level keywords — longest first so "Advanced Intermediate" matches before "Advanced"
+_LEVEL_KEYWORDS = sorted(APPROVED_EVENT_IDS.values(), key=len, reverse=True)
+
+
+def _canonical_event_id(raw_eid, event_name: str):
+    """
+    Return the canonical approved event ID for a history record, or None.
+
+    Strategy:
+      1. If raw_eid is already one of our 5 approved IDs → use it directly.
+      2. If the event name contains "open play" → detect level from title
+         and map to our canonical ID for that level.
+      3. Otherwise → None (record is excluded from popularity scores).
+    """
+    # Strategy 1: direct ID match
+    try:
+        eid = int(raw_eid) if raw_eid is not None else None
+    except (ValueError, TypeError):
+        eid = None
+
+    if eid in APPROVED_EVENT_IDS:
+        return eid
+
+    # Strategy 2: title-based match (open play events only)
+    name_lower = (event_name or "").lower()
+    if "open play" not in name_lower:
+        return None
+
+    for level in _LEVEL_KEYWORDS:
+        if level.lower() in name_lower:
+            return _LEVEL_TO_ID[level]
+
+    return None
 
 
 class PopularityKey(NamedTuple):
     event_id:    int
     day_of_week: str   # "Monday", "Tuesday", …
-    time_band:   str   # "morning", "midday", "afternoon", "evening"
+    time_band:   str   # "0800", "1000", "1400", …
 
 
 def _time_band(dt: datetime) -> str:
@@ -37,7 +95,7 @@ def _time_band(dt: datetime) -> str:
     for name, lo, hi in TIME_BANDS:
         if lo <= h < hi:
             return name
-    return "evening"
+    return "2000"
 
 
 def load_popularity(history_file: Path = HISTORY_FILE) -> dict[PopularityKey, float]:
@@ -55,17 +113,15 @@ def load_popularity(history_file: Path = HISTORY_FILE) -> dict[PopularityKey, fl
     buckets: dict[PopularityKey, list[int]] = defaultdict(list)
 
     for item in items:
-        eid = item.get("EventId")
-        if not eid:
-            continue
-        try:
-            eid = int(eid)
-        except (ValueError, TypeError):
+        event_name = item.get("EventName") or ""
+        raw_eid    = item.get("EventId")
+        eid = _canonical_event_id(raw_eid, event_name)
+        if eid is None:
             continue
 
-        dt  = datetime.fromisoformat(item["StartDateTime"])
-        dow = item.get("DayOfTheWeek") or dt.strftime("%A")
-        band = _time_band(dt)
+        dt    = datetime.fromisoformat(item["StartDateTime"])
+        dow   = item.get("DayOfTheWeek") or dt.strftime("%A")
+        band  = _time_band(dt)
         count = int(item.get("MembersCount") or 0)
 
         buckets[PopularityKey(eid, dow, band)].append(count)

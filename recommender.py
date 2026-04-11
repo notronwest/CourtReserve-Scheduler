@@ -175,7 +175,7 @@ def recommend(
     # Used to avoid over-recommending levels that are already well-covered.
     level_counts: dict[str, int] = {level: 0 for level in LEVEL_ORDER}
 
-    def _detect_level(name: str) -> str | None:
+    def _detect_level(name: str):
         """Return the skill level for an event name, or None if unrecognised."""
         n = name.lower()
         for level in sorted(LEVEL_ORDER, key=len, reverse=True):
@@ -264,6 +264,25 @@ def recommend(
 
     def _pop(eid: int, slot_start: datetime) -> float:
         return popularity_score(pop_scores, eid, day_name, slot_start)
+
+    def _time_pref(slot_start: datetime) -> float:
+        """Time-of-day preference [0–1] used as a tiebreaker when history is absent.
+        Reflects when members actually show up — peaks at midday/early afternoon.
+        History dominates whenever a real popularity score exists.
+        """
+        h = slot_start.hour + slot_start.minute / 60
+        if h < 9:
+            return 0.0    # before 9 AM — avoid unless history says otherwise
+        elif h < 10:
+            return 0.4    # 9–10 AM — acceptable
+        elif h < 12:
+            return 0.7    # 10 AM–noon — good
+        elif h < 17:
+            return 1.0    # noon–5 PM — peak hours
+        elif h < 19:
+            return 0.7    # 5–7 PM — still reasonable
+        else:
+            return 0.3    # after 7 PM — low preference
 
     # ── Build recommendations ─────────────────────────────────────────────────
     recommendations: list[Recommendation] = []
@@ -357,18 +376,21 @@ def recommend(
         candidates = [(cn, ss, se) for cn, ss, se in free_slots if rec_free(cn, ss, se)]
         if not candidates:
             continue
-        # Sort: highest popularity first; ties broken by time (earlier first)
-        candidates.sort(key=lambda s: (-_pop(eid, s[1]), s[1]))
+        # Sort: highest popularity first; ties broken by time-of-day preference
+        # (peak hours over early morning); further ties by earliest slot.
+        candidates.sort(key=lambda s: (-_pop(eid, s[1]), -_time_pref(s[1]), s[1]))
         cn, ss, se = candidates[0]
         add(eid, cn, ss, se)
 
     # Constraint 5 — Pass 2: fill toward utilization target.
-    # For each free slot pick the event with the best popularity score for
-    # this day / time-band.  Fall back to fewest-recs if no history exists.
+    # Sort slots by desirability first (peak hours > early morning) so we fill
+    # the best time windows before falling back to fringe hours like 8 AM.
+    # Within the same preference tier, earlier slots come first.
     added_hrs        = sum((se - ss).total_seconds() / 3600 for _, ss, se in used)
     remaining_needed = needed_court_hours - added_hrs
 
-    for cn, ss, se in free_slots:
+    fill_slots = sorted(free_slots, key=lambda s: (-_time_pref(s[1]), s[1]))
+    for cn, ss, se in fill_slots:
         if remaining_needed <= 0:
             break
         if not rec_free(cn, ss, se):
@@ -382,11 +404,14 @@ def recommend(
             break
         # Rank by:
         #  1. Fewest existing sessions of that level today (fill gaps first)
-        #  2. Highest historical popularity (tiebreaker)
-        #  3. Fewest recommended occurrences so far (balance within level)
+        #  2. Highest historical popularity for this time slot
+        #  3. Time-of-day preference (peak hours > early morning) — tiebreaker
+        #     when no history exists for this event/day/band combination
+        #  4. Fewest recommended occurrences so far (balance within level)
         eligible.sort(key=lambda x: (
             level_counts[APPROVED_EVENTS[x[0]]["level"]] + event_counts[x[0]],
             -_pop(x[0], ss),
+            -_time_pref(ss),
             event_counts[x[0]],
         ))
         eid, _ = eligible[0]
