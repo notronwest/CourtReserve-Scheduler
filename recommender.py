@@ -377,15 +377,33 @@ def recommend(
         preferred = fe.get("preferred_courts", [])
         courts_assigned = []
 
-        # Try preferred courts first, then fall back to court_order
-        search_order = preferred + [c for c in court_order if c not in preferred]
-        for cn in search_order:
-            if cn not in COURTS:
-                continue
-            if len(courts_assigned) >= n_courts_needed:
-                break
-            if not already_on_schedule(cn, fe_start, fe_end) and rec_free(cn, fe_start, fe_end):
-                courts_assigned.append(cn)
+        if n_courts_needed == 2 and not preferred:
+            # Use the ranked pair list from policy — try each pair until one fits
+            pairs = policy["recommendation_rules"].get("two_court_priority_pairs", [[4, 3], [4, 1], [1, 2], [2, 3]])
+            for pair in pairs:
+                if all(
+                    cn in COURTS
+                    and not already_on_schedule(cn, fe_start, fe_end)
+                    and rec_free(cn, fe_start, fe_end)
+                    for cn in pair
+                ):
+                    courts_assigned = list(pair)
+                    break
+        elif preferred:
+            # Explicit preferred_courts on this fixed event — use them directly
+            courts_assigned = [
+                cn for cn in preferred
+                if cn in COURTS
+                and not already_on_schedule(cn, fe_start, fe_end)
+                and rec_free(cn, fe_start, fe_end)
+            ][:n_courts_needed]
+        else:
+            # Single-court: pick first available from court_order
+            for cn in court_order:
+                if len(courts_assigned) >= n_courts_needed:
+                    break
+                if cn in COURTS and not already_on_schedule(cn, fe_start, fe_end) and rec_free(cn, fe_start, fe_end):
+                    courts_assigned.append(cn)
 
         if not courts_assigned:
             continue

@@ -117,7 +117,6 @@
         "start_time": "14:00",
         "end_time": "16:00",
         "courts": 2,
-        "preferred_courts": [3, 4],
         "max_participants": 8,
         "level": "Advanced"
       },
@@ -231,6 +230,12 @@
     },
     "court_fill_preference": "free_courts_first",
     "preferred_court_when_free": 4,
+    "two_court_priority_pairs": [
+      [4, 3],
+      [4, 1],
+      [1, 2],
+      [2, 3]
+    ],
     "approved_event_ids_only": true,
     "default_target_date": "2_weeks_from_today",
     "target_date_note": "When no date is passed to run.py, defaults to 14 days from today. Override by passing a date argument: python run.py M/D/YYYY"
