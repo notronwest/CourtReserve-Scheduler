@@ -8,7 +8,7 @@ LOG_DIR="$HOME/Library/Logs/court_reserve"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/history_$(date +%Y-%m-%d).log"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== History Fetch $(date) ===" >> "$LOG" 2>&1
 
