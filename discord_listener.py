@@ -474,8 +474,12 @@ def main():
                     params = _state["pending_book_params"]
                     _state["pending_book_msg_id"] = None
                     _state["pending_book_params"] = None
-                    _save_state()
-                    _execute_single_booking(params)
+                    _save_state()   # clear pending BEFORE booking so crash-restart doesn't re-confirm
+                    try:
+                        _execute_single_booking(params)
+                    except Exception as exc:
+                        log.error("Ad-hoc booking error: %s", exc, exc_info=True)
+                        _post_message(f"❌ Booking error: {exc}")
                     _save_state()
                     continue
                 elif lower in ("cancel", "no", "skip", "nevermind", "nvm"):
@@ -499,7 +503,15 @@ def main():
                     log.info("Approval declined by user")
                 else:
                     log.info("Approval received: indices %s", result)
-                    _execute_bookings(pending, result)
+                    # Persist cursor BEFORE booking — if booking crashes, restart
+                    # won't re-process the same approval message.
+                    _save_state()
+                    try:
+                        _execute_bookings(pending, result)
+                    except Exception as exc:
+                        log.error("Booking error: %s", exc, exc_info=True)
+                        _post_message(f"❌ Booking error: {exc}")
+                        _clear_pending()
                 _save_state()
 
         _save_state()

@@ -79,8 +79,10 @@ def book_event(
 
     # Screenshot before submit (always, for audit trail)
     import os as _os
-    _os.makedirs("logs/screenshots", exist_ok=True)
-    screenshot_path = f"logs/screenshots/booking_{event_id}_{date.replace('/', '-')}_{start_time.replace(':', '').replace(' ', '')}.png"
+    from pathlib import Path as _Path
+    _SCREENSHOTS = _Path(__file__).parent / "logs" / "screenshots"
+    _os.makedirs(_SCREENSHOTS, exist_ok=True)
+    screenshot_path = str(_SCREENSHOTS / f"booking_{event_id}_{date.replace('/', '-')}_{start_time.replace(':', '').replace(' ', '')}.png")
     page.screenshot(path=screenshot_path)
 
     if dry_run:
