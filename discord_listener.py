@@ -66,6 +66,8 @@ _state = {
     "last_message_id":       None,   # last Discord message ID we processed
     "pending_book_msg_id":   None,   # message_id of the !book preview we posted
     "pending_book_params":   None,   # parsed booking params awaiting confirm
+    "pending_move_msg_id":   None,   # message_id of the !move preview we posted
+    "pending_move_params":   None,   # parsed move params awaiting confirm
 }
 
 
@@ -325,6 +327,102 @@ def _execute_single_booking(params: dict):
         log.warning("Ad-hoc booking failed: %s", result.get("error"))
 
 
+# ── Move execution ────────────────────────────────────────────────────────────
+
+def _execute_move(params: dict):
+    """
+    Find the occurrence on Court Reserve and move it to the new timeslot.
+    Fetches the live schedule inside the browser session to get the occurrence_id.
+    """
+    from cr_client import browser_session, fetch_schedule
+    from book_event import move_occurrence
+    from discord_notify import LEVEL_EMOJI
+    from policy_loader import load_policy
+
+    target_date        = params["date"]
+    event_id           = params["event_id"]
+    event_name         = params["event_name"]
+    current_start      = params["current_start_time"]
+    new_start          = params["new_start_time"]
+    new_end            = params["new_end_time"]
+    new_court_id       = params.get("new_court_id")
+    new_court_num      = params.get("new_court_num")
+
+    if not _acquire_lock():
+        _post_message("⏳ Scheduler is currently running — try `!move` again in a few minutes.")
+        return
+
+    policy = load_policy()
+    level  = policy.get("approved_events", {}).get(str(event_id), {}).get("level", "")
+    emoji  = LEVEL_EMOJI.get(level, "⚪")
+
+    try:
+        with browser_session(headless=False) as page:
+            items = fetch_schedule(target_date, target_date, page=page)
+
+            # Find the occurrence matching event_id + current start time
+            from datetime import datetime as _dt
+            target_hhmm = _dt.strptime(current_start, "%I:%M %p").strftime("%H:%M")
+
+            match = None
+            for item in items:
+                if str(item.get("EventId", "")) == str(event_id):
+                    item_hhmm = item.get("StartDateTime", "")[11:16]
+                    if item_hhmm == target_hhmm:
+                        match = item
+                        break
+
+            if not match:
+                _post_message(
+                    f"❌ Couldn't find **{event_name}** at {current_start} on {target_date}.\n"
+                    "Double-check the event name, date, and current start time."
+                )
+                log.warning("Move: no matching occurrence found for event_id=%s start=%s", event_id, current_start)
+                return
+
+            occurrence_id = match.get("Id")
+            if not occurrence_id:
+                _post_message(f"❌ Found the event but couldn't read its occurrence ID.")
+                return
+
+            # Determine which court we're keeping or moving to (for the result message)
+            existing_courts = match.get("Courts", "")
+            log.info(
+                "Move: %s occ_id=%s from %s → %s%s",
+                event_name, occurrence_id, current_start, new_start,
+                f" Court #{new_court_num}" if new_court_num else "",
+            )
+
+            result = move_occurrence(
+                page           = page,
+                event_id       = event_id,
+                occurrence_id  = occurrence_id,
+                new_start_time = new_start,
+                new_end_time   = new_end,
+                new_court_id   = new_court_id,
+            )
+    finally:
+        _release_lock()
+
+    if result["success"]:
+        court_note = f" → Court #{new_court_num}" if new_court_num else ""
+        _post_embed({"embeds": [{
+            "title": "✅ Moved!",
+            "color": 0x2ECC71,
+            "description": (
+                f"{emoji} **{event_name}**\n"
+                f"{target_date}  ·  "
+                f"~~{current_start}~~ → **{new_start} – {new_end}**"
+                f"{court_note}"
+            ),
+            "footer": {"text": "White Mountain Pickleball • Court Reserve Scheduler"},
+        }]})
+        log.info("Move succeeded: %s %s → %s", event_name, current_start, new_start)
+    else:
+        _post_message(f"❌ Move failed: {result.get('error', 'unknown error')}")
+        log.warning("Move failed: %s", result.get("error"))
+
+
 # ── Date parser (shared by !schedule) ────────────────────────────────────────
 
 def _parse_date(text: str):
@@ -420,6 +518,64 @@ def _handle_schedule_command(text: str):
     )
     log_fh.close()   # parent closes its copy; child keeps the fd
     log.info("run.py started (pid=%d) for %s", proc.pid, date_str)
+
+
+# ── !move command handler ─────────────────────────────────────────────────────
+
+def _handle_move_command(text: str):
+    """Parse !move text, post preview embed, save params for confirmation."""
+    from llm_parser import parse_move_command
+    from policy_loader import load_policy
+    from discord_notify import LEVEL_EMOJI
+
+    log.info("!move command received: %s", text)
+    policy = load_policy()
+
+    try:
+        params = parse_move_command(text, policy)
+    except Exception as e:
+        _post_message(f"❌ Could not parse move request: {e}")
+        log.warning("Move parse error: %s", e)
+        return
+
+    if params.get("error") or not params.get("event_id"):
+        _post_message(
+            f"❌ Couldn't understand that move request.\n"
+            f"Reason: {params.get('error', 'unknown')}\n\n"
+            "Try: `!move Intermediate open play 4/30 from 9am to 11am`"
+        )
+        return
+
+    from datetime import datetime as _dt
+    try:
+        day_label = _dt.strptime(params["date"], "%m/%d/%Y").strftime("%A, %B %-d %Y")
+    except Exception:
+        day_label = params["date"]
+
+    level  = policy.get("approved_events", {}).get(str(params["event_id"]), {}).get("level", "")
+    emoji  = LEVEL_EMOJI.get(level, "⚪")
+    fields = [
+        {"name": "Event",   "value": f"{emoji} {params['event_name']}", "inline": True},
+        {"name": "Date",    "value": day_label, "inline": True},
+        {"name": "From",    "value": f"~~{params['current_start_time']}~~ – {params['new_start_time']} – {params['new_end_time']}", "inline": False},
+    ]
+    if params.get("new_court_num"):
+        fields.append({"name": "New court", "value": f"Court #{params['new_court_num']}", "inline": True})
+
+    msg_id = _post_embed({"embeds": [{
+        "title": "🔀 Move Preview",
+        "color": 0xF39C12,
+        "fields": fields,
+        "footer": {"text": "Reply confirm to move  ·  cancel to skip"},
+    }]})
+
+    # Clear any pending book action so confirm applies to this move
+    _state["pending_book_msg_id"]  = None
+    _state["pending_book_params"]  = None
+    _state["pending_move_msg_id"]  = msg_id
+    _state["pending_move_params"]  = params
+    _save_state()
+    log.info("Move preview posted (msg_id=%s)", msg_id)
 
 
 # ── !book command handler ─────────────────────────────────────────────────────
@@ -585,6 +741,16 @@ def main():
                             ),
                             "inline": False,
                         },
+                        {
+                            "name": "!move <event> <date> from <time> to <time>",
+                            "value": (
+                                "Move an existing event to a different timeslot\n"
+                                "`!move Intermediate 4/30 from 9am to 11am`\n"
+                                "`!move Advanced 4/29 from 1pm to 3pm Court 1`\n"
+                                "Then reply `confirm` to move or `cancel` to skip."
+                            ),
+                            "inline": False,
+                        },
                     ],
                     "footer": {"text": "White Mountain Pickleball • Court Reserve Scheduler"},
                 }]})
@@ -605,6 +771,20 @@ def main():
                 _save_state()
                 continue
 
+            # ── Check for !move command ──────────────────────────────────────
+            if content.lower().startswith("!move"):
+                move_text = content[5:].strip()
+                if move_text:
+                    _handle_move_command(move_text)
+                else:
+                    _post_message(
+                        "Usage: `!move <event> <date> from <time> to <time>`\n"
+                        "Example: `!move Intermediate open play 4/30 from 9am to 11am`\n"
+                        "Optional: add a court — `… to 11am Court 2`"
+                    )
+                _save_state()
+                continue
+
             # ── Check for !book command ──────────────────────────────────────
             if content.lower().startswith("!book"):
                 request_text = content[5:].strip()
@@ -617,6 +797,29 @@ def main():
                     )
                 _save_state()
                 continue
+
+            # ── Check for pending !move confirmation ─────────────────────────
+            if _state.get("pending_move_params"):
+                lower = content.lower()
+                if lower in ("confirm", "yes", "ok", "do it"):
+                    params = _state["pending_move_params"]
+                    _state["pending_move_msg_id"] = None
+                    _state["pending_move_params"] = None
+                    _save_state()
+                    try:
+                        _execute_move(params)
+                    except Exception as exc:
+                        log.error("Move error: %s", exc, exc_info=True)
+                        _post_message(f"❌ Move error: {exc}")
+                    _save_state()
+                    continue
+                elif lower in ("cancel", "no", "skip", "nevermind", "nvm"):
+                    _state["pending_move_msg_id"] = None
+                    _state["pending_move_params"] = None
+                    _save_state()
+                    _post_message("🚫 Move cancelled.")
+                    log.info("Move cancelled by user")
+                    continue
 
             # ── Check for pending !book confirmation ─────────────────────────
             if _state.get("pending_book_params"):

@@ -118,3 +118,93 @@ If you cannot parse the request, return {{"error": "<reason>", "event_id": null}
             parsed["error"] = f"Court ID {parsed['court_id']} is not recognised"
 
     return parsed
+
+
+def parse_move_command(text: str, policy: dict, today: str = None) -> dict:
+    """
+    Parse a free-form move request into structured parameters.
+
+    Examples:
+        "Intermediate open play 4/30 from 9am to 11am"
+        "Advanced 4/29 9am → 2pm"
+        "Beginner 4/30 from 9am to 11am Court 2"
+
+    Returns dict with:
+        event_id, event_name, date, current_start_time,
+        new_start_time, new_end_time,
+        new_court_id (null = keep current), new_court_num (null = keep current),
+        error (if parsing failed)
+    """
+    import anthropic
+
+    if today is None:
+        today = datetime.now().strftime("%-m/%-d/%Y")
+
+    events_text = "\n".join(
+        f"  {eid}: {e['name']} (level: {e['level']})"
+        for eid, e in policy["approved_events"].items()
+    )
+    courts_text = "\n".join(
+        f"  {cid}: Court #{c['number']}"
+        for cid, c in policy["courts"].items()
+    )
+
+    prompt = f"""You are parsing a pickleball court event MOVE request into structured JSON.
+
+Today is {today}.
+
+Approved events:
+{events_text}
+
+Available courts:
+{courts_text}
+
+The user wants to move an existing event occurrence to a new timeslot on the same day.
+"from X to Y" means: event currently starts at X, move it to start at Y.
+All open play sessions are exactly 2 hours long (new end = new start + 2h).
+If a court is mentioned, it becomes the new court (new_court_id/new_court_num); otherwise leave null.
+
+Move request: "{text}"
+
+Return ONLY valid JSON:
+{{
+  "event_id": <int>,
+  "event_name": <string>,
+  "date": "<M/D/YYYY>",
+  "current_start_time": "<H:MM AM/PM>",
+  "new_start_time": "<H:MM AM/PM>",
+  "new_end_time": "<H:MM AM/PM>",
+  "new_court_id": <int or null>,
+  "new_court_num": <int or null>,
+  "error": null
+}}
+
+If you cannot parse the request, return {{"error": "<reason>", "event_id": null}}"""
+
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = resp.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    parsed = json.loads(raw)
+
+    if parsed.get("event_id"):
+        approved = policy.get("approved_events", {})
+        if str(parsed["event_id"]) not in approved:
+            parsed["error"] = f"Event ID {parsed['event_id']} is not in the approved events list"
+
+    if parsed.get("new_court_id"):
+        known = policy.get("courts", {})
+        if str(parsed["new_court_id"]) not in known:
+            parsed["error"] = f"Court ID {parsed['new_court_id']} is not recognised"
+
+    return parsed

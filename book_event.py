@@ -228,8 +228,10 @@ def edit_occurrence_multi_court(
     Returns {"success", "method", "screenshot", "error"}
     """
     import os as _os
-    _os.makedirs("logs/screenshots", exist_ok=True)
-    shot_base = f"logs/screenshots/multicourt_{occurrence_id}"
+    from pathlib import Path as _Path
+    _SCREENSHOTS = _Path(__file__).parent / "logs" / "screenshots"
+    _os.makedirs(_SCREENSHOTS, exist_ok=True)
+    shot_base = str(_SCREENSHOTS / f"multicourt_{occurrence_id}")
 
     if dry_run:
         return {
@@ -358,6 +360,127 @@ def edit_occurrence_multi_court(
         "screenshot": f"{shot_base}_after_save.png",
         "error": None,
     }
+
+
+def move_occurrence(
+    page:           Page,
+    event_id:       int,
+    occurrence_id:  int,
+    new_start_time: str,          # '11:00 AM'
+    new_end_time:   str,          # '1:00 PM'
+    new_court_id:   int = None,   # None = keep existing court
+    dry_run:        bool = False,
+) -> dict:
+    """
+    Move an existing occurrence to a new timeslot (and optionally a new court)
+    by opening the UpdateReservation modal on the occurrences grid page.
+
+    Returns {"success", "screenshot", "error"}
+    """
+    from pathlib import Path as _Path
+    import os as _os
+    _SCREENSHOTS = _Path(__file__).parent / "logs" / "screenshots"
+    _os.makedirs(_SCREENSHOTS, exist_ok=True)
+    shot_base = str(_SCREENSHOTS / f"move_{occurrence_id}")
+
+    if dry_run:
+        return {"success": True, "dry_run": True, "screenshot": f"{shot_base}_dryrun.png", "error": None}
+
+    # Navigate to occurrences grid (jQuery + Kendo available here)
+    page.goto(OCCURRENCES_URL.format(event_id=event_id))
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(2000)
+
+    # Click the UpdateReservation modal link for this occurrence
+    clicked = page.evaluate(f"""
+        (function() {{
+            var links = Array.from(document.querySelectorAll('a[data-remote*="UpdateReservation"]'));
+            for (var l of links) {{
+                if (l.getAttribute('data-remote').indexOf('{occurrence_id}') !== -1) {{
+                    l.click();
+                    return true;
+                }}
+            }}
+            return false;
+        }})()
+    """)
+
+    if not clicked:
+        page.screenshot(path=f"{shot_base}_no_edit_link.png")
+        return {
+            "success": False,
+            "screenshot": f"{shot_base}_no_edit_link.png",
+            "error": f"Edit link for occurrence_id={occurrence_id} not found in grid",
+        }
+
+    try:
+        page.wait_for_selector(".action-modal.in", timeout=10000)
+    except Exception:
+        page.screenshot(path=f"{shot_base}_modal_timeout.png")
+        return {
+            "success": False,
+            "screenshot": f"{shot_base}_modal_timeout.png",
+            "error": "Timed out waiting for edit modal",
+        }
+    page.wait_for_timeout(1500)
+
+    court_js = ""
+    if new_court_id:
+        court_js = f"""
+            var ms = $('#Courts').data('kendoMultiSelect');
+            if (ms) {{ ms.value([]); ms.value([{new_court_id}]); ms.trigger('change'); }}
+        """
+
+    page.evaluate(f"""
+        (function() {{
+            // Edit only this occurrence, not the whole series
+            var cb = $('#EditOnlyCurrentOccurrence');
+            if (cb.length && !cb.is(':checked')) {{
+                cb.prop('checked', true).trigger('change');
+            }}
+            // New start time
+            var tp1 = $('#StartTime').data('kendoTimePicker');
+            if (tp1) {{ tp1.value('{new_start_time}'); tp1.trigger('change'); }}
+            // New end time
+            var tp2 = $('#EndTime').data('kendoTimePicker');
+            if (tp2) {{ tp2.value('{new_end_time}'); tp2.trigger('change'); }}
+            // Optionally change court
+            {court_js}
+        }})();
+    """)
+    page.wait_for_timeout(1500)
+    page.screenshot(path=f"{shot_base}_before_save.png")
+
+    save_btn = page.query_selector(
+        ".action-modal button.btn-success:not(:has-text('Register')), "
+        ".modal button:has-text('Save'):not(:has-text('Register'))"
+    )
+    if not save_btn:
+        save_btn = page.query_selector(".action-modal button:has-text('Save'), .modal button:has-text('Save')")
+    if not save_btn:
+        return {
+            "success": False,
+            "screenshot": f"{shot_base}_before_save.png",
+            "error": "Save button not found in modal",
+        }
+
+    try:
+        save_btn.click()
+        page.wait_for_timeout(3000)
+    except Exception:
+        pass
+
+    try:
+        err_el = page.query_selector(".alert-danger, .validation-summary-errors, .field-validation-error")
+        if err_el and err_el.is_visible():
+            err_text = err_el.inner_text().strip()
+            page.screenshot(path=f"{shot_base}_error.png")
+            return {"success": False, "screenshot": f"{shot_base}_error.png", "error": err_text}
+    except Exception:
+        pass
+
+    page.screenshot(path=f"{shot_base}_after_save.png")
+    return {"success": True, "screenshot": f"{shot_base}_after_save.png", "error": None}
 
 
 def fix_event_court(
