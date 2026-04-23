@@ -160,6 +160,9 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     echo "      $INSTALL_DIR/.env"
     echo ""
     echo "  Required values:"
+    echo "    CR_LOGIN_URL         — your Court Reserve org login URL (e.g. https://app.courtreserve.com/Online/Account/LogIn/12345)"
+    echo "    CR_USERNAME          — your Court Reserve admin email"
+    echo "    CR_PASSWORD          — your Court Reserve admin password"
     echo "    DISCORD_WEBHOOK_URL  — webhook URL from Server Settings → Integrations"
     echo "    DISCORD_BOT_TOKEN    — bot token from discord.com/developers"
     echo "    DISCORD_CHANNEL_ID   — right-click channel → Copy Channel ID"
@@ -171,7 +174,7 @@ else
 fi
 
 # Validate required keys are non-empty
-required_keys=(DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
+required_keys=(CR_LOGIN_URL CR_USERNAME CR_PASSWORD DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
 missing=()
 while IFS='=' read -r key _; do
     [[ "$key" =~ ^# ]] && continue

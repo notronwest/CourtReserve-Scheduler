@@ -71,7 +71,7 @@ if [[ ! -f "$ENV" ]]; then
     fail ".env missing — run ./setup.sh or copy from another machine"
 else
     pass ".env exists"
-    required_keys=(DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
+    required_keys=(CR_LOGIN_URL CR_USERNAME CR_PASSWORD DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
     for key in "${required_keys[@]}"; do
         value="$(grep "^${key}=" "$ENV" 2>/dev/null | cut -d= -f2- | tr -d '"'\''[:space:]')"
         if [[ -z "$value" || "$value" == *"your_"* || "$value" == *"YOUR_"* ]]; then

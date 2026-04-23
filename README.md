@@ -53,8 +53,22 @@ python -m playwright install chromium
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in all four values
+# Edit .env and fill in all seven values
 ```
+
+#### `CR_LOGIN_URL`
+Your Court Reserve organization's login page URL.
+
+1. Go to [app.courtreserve.com](https://app.courtreserve.com) and log in as an admin
+2. Copy the URL from your browser's address bar — it will look like:  
+   `https://app.courtreserve.com/Online/Account/LogIn/12345`  
+   (the number at the end is your org ID)
+3. Paste the full URL as the value of `CR_LOGIN_URL`
+
+#### `CR_USERNAME` and `CR_PASSWORD`
+Your Court Reserve admin account credentials (the email and password you use to log into Court Reserve).
+
+> The scheduler uses these to log in automatically each time it runs to fetch the live schedule and book events.
 
 #### `DISCORD_WEBHOOK_URL`
 The webhook is used to post recommendation and booking result embeds to your channel.
