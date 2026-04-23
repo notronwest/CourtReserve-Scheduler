@@ -8,7 +8,7 @@ PIP    := venv/bin/pip
 # Default DATE is 14 days out (the scheduler's booking horizon)
 DATE   ?= $(shell python3 -c "from datetime import date,timedelta; d=date.today()+timedelta(14); print(f'{d.month}/{d.day}/{d.year}')")
 
-.PHONY: help setup check run dry-run history logs status restart migrate push uninstall
+.PHONY: help setup check test run dry-run history logs status restart migrate push uninstall
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 help:
@@ -30,6 +30,7 @@ help:
 	@echo "  Setup & maintenance:"
 	@echo "    make setup           Run the full setup script"
 	@echo "    make check           Health check (env, services, API keys)"
+	@echo "    make test            Live connectivity test (CR login, Discord, Anthropic)"
 	@echo "    make migrate         Create a migration bundle for a new machine"
 	@echo "    make uninstall       Completely remove the scheduler from this Mac"
 	@echo "    make push            Push latest changes to GitHub"
@@ -41,6 +42,9 @@ setup:
 
 check:
 	chmod +x check.sh && ./check.sh
+
+test:
+	$(PYTHON) test_connections.py
 
 # ── Daily operation ───────────────────────────────────────────────────────────
 status:
