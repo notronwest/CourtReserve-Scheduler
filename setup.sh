@@ -160,7 +160,7 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     echo "      $INSTALL_DIR/.env"
     echo ""
     echo "  Required values:"
-    echo "    CR_LOGIN_URL         — your Court Reserve org login URL (e.g. https://app.courtreserve.com/Online/Account/LogIn/12345)"
+    echo "    CR_LOGIN_URL         — always: https://app.courtreserve.com/Account/Login"
     echo "    CR_USERNAME          — your Court Reserve admin email"
     echo "    CR_PASSWORD          — your Court Reserve admin password"
     echo "    DISCORD_WEBHOOK_URL  — webhook URL from Server Settings → Integrations"
