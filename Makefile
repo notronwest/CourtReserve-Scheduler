@@ -60,7 +60,8 @@ logs:
 restart:
 	launchctl unload ~/Library/LaunchAgents/com.whitemountain.listener.plist
 	launchctl load  ~/Library/LaunchAgents/com.whitemountain.listener.plist
-	@echo "Listener restarted — tailing log (Ctrl+C to exit):"
+	@echo "Listener restarted and running in background."
+	@echo "Tailing log — Ctrl+C to stop watching (listener keeps running):"
 	@sleep 2 && tail -f logs/listener.log
 
 # ── Manual runs ───────────────────────────────────────────────────────────────
