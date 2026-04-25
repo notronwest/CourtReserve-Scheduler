@@ -12,10 +12,13 @@ Env vars:
 """
 
 import os
+import socket
 import time
 import requests
 from datetime import datetime, timezone
 from recommender import Recommendation, LEVEL_ORDER
+
+HOSTNAME = socket.gethostname().split(".")[0]  # short name, no domain
 
 WEBHOOK_URL  = os.getenv("DISCORD_WEBHOOK_URL", "")
 BOT_TOKEN    = os.getenv("DISCORD_BOT_TOKEN", "")
@@ -121,7 +124,7 @@ def _build_embed(
             "title": f"🏓 Schedule Recommendations — {day_label}",
             "color": color,
             "fields": fields,
-            "footer": {"text": "White Mountain Pickleball • Court Reserve Scheduler"},
+            "footer": {"text": f"White Mountain Pickleball • Court Reserve Scheduler • {HOSTNAME}"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }]
     }
@@ -173,7 +176,7 @@ def maybe_send_fixed_events_reminder(policy: dict):
                     "inline": False,
                 },
             ],
-            "footer": {"text": "White Mountain Pickleball • This reminder posts daily until the list is complete"},
+            "footer": {"text": f"White Mountain Pickleball • This reminder posts daily until the list is complete • {HOSTNAME}"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }]
     }
@@ -352,7 +355,7 @@ def send_booking_results(
 
     color = 0x2ECC71 if n_fail == 0 else (0xE74C3C if n_ok == 0 else 0xF39C12)
 
-    footer_text = "White Mountain Pickleball • Court Reserve Scheduler"
+    footer_text = f"White Mountain Pickleball • Court Reserve Scheduler • {HOSTNAME}"
 
     fields = [{
         "name": f"Results — {n_ok} booked, {n_fail} failed",
