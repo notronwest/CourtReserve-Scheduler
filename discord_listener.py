@@ -19,6 +19,7 @@ Env vars (same .env as the rest of the project):
 """
 
 import os
+import socket
 import sys
 import json
 import time
@@ -26,6 +27,8 @@ import signal
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+
+_HOSTNAME = socket.gethostname().split(".")[0]
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env", override=True)
@@ -92,13 +95,13 @@ def _get_messages(after_id=None):
     try:
         r = requests.get(
             f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages",
-            headers=HEADERS, params=params, timeout=10,
+            headers=HEADERS, params=params, timeout=15,
         )
         r.raise_for_status()
         return r.json()
     except Exception as e:
         log.warning("Discord poll error: %s", e)
-        return []
+        return None  # None = error (vs [] = no new messages)
 
 
 def _get_bot_id():
@@ -706,13 +709,22 @@ def main():
 
     log.info("Polling channel %s every %ds", CHANNEL_ID, POLL_INTERVAL_SECS)
 
+    _consecutive_errors = 0
+    _MAX_BACKOFF = 60  # cap backoff at 60s
+
     while True:
-        try:
-            messages = _get_messages(after_id=_state["last_message_id"])
-        except Exception as e:
-            log.warning("Poll error: %s", e)
-            time.sleep(POLL_INTERVAL_SECS)
+        messages = _get_messages(after_id=_state["last_message_id"])
+
+        if messages is None:
+            # Discord error — back off exponentially, cap at 60s
+            _consecutive_errors += 1
+            backoff = min(POLL_INTERVAL_SECS * (2 ** (_consecutive_errors - 1)), _MAX_BACKOFF)
+            if _consecutive_errors == 1 or _consecutive_errors % 5 == 0:
+                log.warning("Discord unreachable (error #%d) — retrying in %ds", _consecutive_errors, backoff)
+            time.sleep(backoff)
             continue
+
+        _consecutive_errors = 0  # reset on success
 
         # Process oldest-first
         for msg in reversed(messages):
@@ -772,7 +784,7 @@ def main():
                             "inline": False,
                         },
                     ],
-                    "footer": {"text": "White Mountain Pickleball • Court Reserve Scheduler"},
+                    "footer": {"text": f"White Mountain Pickleball • Court Reserve Scheduler • {_HOSTNAME}"},
                 }]})
                 _save_state()
                 continue
