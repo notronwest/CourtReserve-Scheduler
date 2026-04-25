@@ -97,8 +97,8 @@ make migrate           # Create migration bundle for a new machine
 Stored in `.env` (never committed):
 
 ```
-CR_LOGIN_URL          # https://app.courtreserve.com/Online/Account/LogIn/<org_id>
-CR_USERNAME           # Court Reserve admin email
+CR_BASE_URL           # https://app.courtreserve.com
+CR_EMAIL              # Court Reserve admin email
 CR_PASSWORD           # Court Reserve admin password
 DISCORD_WEBHOOK_URL   # Webhook for posting embeds
 DISCORD_BOT_TOKEN     # Bot token for reading channel messages

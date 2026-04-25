@@ -8,9 +8,11 @@ from playwright_stealth import Stealth
 
 load_dotenv(override=True)
 
-LOGIN_URL    = os.environ["CR_LOGIN_URL"]
-USERNAME     = os.environ["CR_USERNAME"]
-PASSWORD     = os.environ["CR_PASSWORD"]
+# Support both key naming conventions
+_base = os.environ.get("CR_BASE_URL", "https://app.courtreserve.com").rstrip("/")
+LOGIN_URL = os.environ.get("CR_LOGIN_URL") or f"{_base}/Account/Login"
+USERNAME  = os.environ.get("CR_USERNAME")  or os.environ.get("CR_EMAIL", "")
+PASSWORD  = os.environ.get("CR_PASSWORD", "")
 
 REPORT_URL = (
     "https://app.courtreserve.com/ReservationReportBuilder/RunReportWithFields"

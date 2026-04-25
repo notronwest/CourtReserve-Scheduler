@@ -160,7 +160,8 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     echo "      $INSTALL_DIR/.env"
     echo ""
     echo "  Required values:"
-    echo "    CR_LOGIN_URL         — always: https://app.courtreserve.com/Account/Login"
+    echo "    CR_BASE_URL          — https://app.courtreserve.com"
+    echo "    CR_EMAIL             — your Court Reserve admin email"
     echo "    CR_USERNAME          — your Court Reserve admin email"
     echo "    CR_PASSWORD          — your Court Reserve admin password"
     echo "    DISCORD_WEBHOOK_URL  — webhook URL from Server Settings → Integrations"
@@ -174,7 +175,7 @@ else
 fi
 
 # Validate required keys are non-empty
-required_keys=(CR_LOGIN_URL CR_USERNAME CR_PASSWORD DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
+required_keys=(CR_BASE_URL CR_EMAIL CR_PASSWORD DISCORD_WEBHOOK_URL DISCORD_BOT_TOKEN DISCORD_CHANNEL_ID ANTHROPIC_API_KEY)
 missing=()
 while IFS='=' read -r key _; do
     [[ "$key" =~ ^# ]] && continue

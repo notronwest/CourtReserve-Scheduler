@@ -56,17 +56,17 @@ cp .env.example .env
 # Edit .env and fill in all seven values
 ```
 
-#### `CR_LOGIN_URL`, `CR_USERNAME`, `CR_PASSWORD`
+#### `CR_BASE_URL`, `CR_EMAIL`, `CR_PASSWORD`
 Your Court Reserve admin login credentials. The scheduler uses these to log in automatically each time it runs to fetch the schedule and book events.
 
 ```
-CR_LOGIN_URL=https://app.courtreserve.com/Account/Login
-CR_USERNAME=your_admin_email@example.com
+CR_BASE_URL=https://app.courtreserve.com
+CR_EMAIL=your_admin_email@example.com
 CR_PASSWORD=your_admin_password
 ```
 
-`CR_LOGIN_URL` is always `https://app.courtreserve.com/Account/Login` — use that exact value.  
-`CR_USERNAME` and `CR_PASSWORD` are the email and password you use to log into Court Reserve as an admin.
+`CR_BASE_URL` is always `https://app.courtreserve.com` — use that exact value.  
+`CR_EMAIL` and `CR_PASSWORD` are the email and password you use to log into Court Reserve as an admin.
 
 #### `DISCORD_WEBHOOK_URL`
 The webhook is used to post recommendation and booking result embeds to your channel.
