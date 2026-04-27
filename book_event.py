@@ -40,6 +40,10 @@ def book_event(
     page.wait_for_load_state("networkidle", timeout=20000)
     page.wait_for_timeout(1000)
 
+    # Dismiss any announcement popup that might be blocking the form
+    from cr_client import dismiss_popups
+    dismiss_popups(page)
+
     # Log where we actually landed (could be a login redirect)
     landed_url = page.url
     page_title  = page.title()

@@ -187,7 +187,7 @@ def _execute_bookings(pending: dict, selected_indices: list):
     from recommender import Recommendation
     from cr_client import browser_session, fetch_schedule
     from book_event import book_event, edit_occurrence_multi_court
-    from discord_notify import send_booking_results, LEVEL_EMOJI
+    from discord_notify import LEVEL_EMOJI
 
     recs_raw = pending["recommendations"]
     target_date = pending["target_date"]
@@ -234,12 +234,81 @@ def _execute_bookings(pending: dict, selected_indices: list):
     finally:
         _release_lock()
 
-    # Post results to Discord
-    send_booking_results(results, target_date)
+    from discord_notify import send_booking_results, wait_for_retry_reply
 
-    n_ok  = sum(1 for r in results if r["result"]["success"])
-    n_fail = len(results) - n_ok
-    log.info("Done: %d booked, %d failed", n_ok, n_fail)
+    MAX_ATTEMPTS = 3
+    attempt = 1
+
+    while True:
+        n_ok   = sum(1 for r in results if r["result"]["success"])
+        n_fail = len(results) - n_ok
+        log.info("Done: %d booked, %d failed (attempt %d/%d)", n_ok, n_fail, attempt, MAX_ATTEMPTS)
+
+        result_msg_id = send_booking_results(results, target_date, attempt=attempt, max_attempts=MAX_ATTEMPTS)
+
+        if n_fail == 0 or attempt >= MAX_ATTEMPTS or not result_msg_id:
+            break
+
+        # Wait for retry/skip reply (blocks up to 3 minutes)
+        log.info("Waiting for retry reply...")
+        retry, last_seen_id = wait_for_retry_reply(result_msg_id, n_fail, timeout=180)
+
+        # Advance the listener cursor so the retry message isn't reprocessed
+        if last_seen_id and last_seen_id > _state.get("last_message_id", "0"):
+            _state["last_message_id"] = last_seen_id
+            _save_state()
+
+        if not retry or retry == "skip":
+            log.info("Retry skipped or timed out.")
+            break
+
+        # Build list of recs to retry (retry is 0-based indices into the failed list)
+        failed_list = [r for r in results if not r["result"]["success"]]
+        to_retry    = [Recommendation.from_dict(failed_list[i]["recommendation"]) for i in retry]
+        attempt    += 1
+        log.info("Retrying %d booking(s), attempt %d/%d", len(to_retry), attempt, MAX_ATTEMPTS)
+
+        if not _acquire_lock():
+            _post_message("❌ Browser locked — cannot retry. Try again in a few minutes.")
+            break
+
+        retry_results = []
+        try:
+            with browser_session(headless=False) as page:
+                for r in to_retry:
+                    log.info("  Retrying: %s", r.display())
+                    res = book_event(
+                        page       = page,
+                        event_id   = r.event_id,
+                        date       = target_date,
+                        start_time = r.start.strftime("%-I:%M %p"),
+                        end_time   = r.end.strftime("%-I:%M %p"),
+                        court_id   = r.court_id,
+                        dry_run    = False,
+                    )
+                    if res["success"] and r.is_multi_court:
+                        occ_id  = res.get("occurrence_id")
+                        all_ids = [r.court_id] + r.extra_court_ids
+                        if occ_id:
+                            edit_occurrence_multi_court(
+                                page             = page,
+                                occurrence_id    = occ_id,
+                                all_court_ids    = all_ids,
+                                event_id         = r.event_id,
+                                max_participants = r.max_participants,
+                            )
+                    retry_results.append({"recommendation": r.to_dict(), "result": res})
+        finally:
+            _release_lock()
+
+        # Merge retry results back into the main results list (match by event_id + start_time)
+        for rr in retry_results:
+            key = (rr["recommendation"]["event_id"], rr["recommendation"]["start_time"])
+            for i, orig in enumerate(results):
+                if (orig["recommendation"]["event_id"], orig["recommendation"]["start_time"]) == key:
+                    results[i] = rr
+                    break
+
     _clear_pending()
 
 

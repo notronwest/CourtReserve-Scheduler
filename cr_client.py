@@ -24,6 +24,34 @@ REPORT_URL = (
 )
 
 
+def dismiss_popups(page: Page):
+    """Dismiss any visible modal/popup overlays (e.g. Court Reserve announcements)."""
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        # Wait briefly for a modal to appear
+        page.wait_for_selector(".modal.in, .modal.show", timeout=4000)
+        # Try buttons in priority order: explicit close/dismiss, then OK/primary, then any button
+        for selector in [
+            ".modal.in .close",
+            ".modal.show .close",
+            ".modal.in [data-dismiss='modal']",
+            ".modal.show [data-dismiss='modal']",
+            ".modal.in .btn-primary",
+            ".modal.show .btn-primary",
+            ".modal.in .btn",
+            ".modal.show .btn",
+        ]:
+            btn = page.query_selector(selector)
+            if btn and btn.is_visible():
+                _log.info("Dismissing popup via: %s", selector)
+                btn.click()
+                page.wait_for_timeout(800)
+                break
+    except Exception:
+        pass  # No popup — that's fine
+
+
 def login(page: Page):
     page.goto(LOGIN_URL)
     page.wait_for_selector('input[placeholder="Enter Your Email"]', timeout=30000)
@@ -31,6 +59,7 @@ def login(page: Page):
     page.fill('input[placeholder="Enter Your Password"]', PASSWORD)
     page.click('button:has-text("Continue")')
     page.wait_for_url(lambda url: "login" not in url.lower(), timeout=30000)
+    dismiss_popups(page)  # dismiss any announcement modal shown after login
 
 
 @contextmanager

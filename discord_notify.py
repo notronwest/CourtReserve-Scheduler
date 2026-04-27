@@ -430,13 +430,15 @@ def wait_for_retry_reply(
     after_message_id: str,
     n_failed: int,
     timeout: int = 180,  # 3 minutes for retries
-) -> object:
+) -> tuple:
     """
     Poll for a retry/skip reply after a results post.
-    Returns list of 0-based failed-list positions to retry, 'skip', or None on timeout.
+    Returns (result, last_seen_id) where result is:
+      list of 0-based failed-list positions, 'skip', or None on timeout.
+    last_seen_id is the most recent Discord message ID seen (for cursor update).
     """
     if not BOT_TOKEN or not CHANNEL_ID:
-        return None
+        return None, after_message_id
 
     print(f"  Waiting for retry reply (timeout: {timeout}s)...")
     deadline = time.time() + timeout
@@ -455,10 +457,10 @@ def wait_for_retry_reply(
             parsed  = _parse_retry_reply(msg.get("content", ""), n_failed)
             if parsed is None:
                 continue
-            return parsed
+            return parsed, last_id
 
     print("  Retry window timed out — treating as skip.")
-    return "skip"
+    return "skip", last_id
 
 
 # ── Two-way flow ──────────────────────────────────────────────────────────────
