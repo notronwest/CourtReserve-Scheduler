@@ -34,6 +34,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env", override=True)
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,26 @@ LOG_DIR             = Path(__file__).parent / "logs"
 PENDING_EXPIRE_DAYS = 2   # auto-clear approvals older than this
 
 HEADERS = {"Authorization": f"Bot {BOT_TOKEN}"}
+
+# Persistent session with automatic retry on connection errors.
+# This handles RemoteDisconnected and similar transient TCP failures
+# without surfacing them as warnings.
+def _make_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET", "POST"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+_session = _make_session()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -93,9 +115,9 @@ def _get_messages(after_id=None):
     if after_id:
         params["after"] = after_id
     try:
-        r = requests.get(
+        r = _session.get(
             f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages",
-            headers=HEADERS, params=params, timeout=15,
+            params=params, timeout=15,
         )
         r.raise_for_status()
         return r.json()
@@ -106,7 +128,7 @@ def _get_messages(after_id=None):
 
 def _get_bot_id():
     try:
-        r = requests.get("https://discord.com/api/v10/users/@me", headers=HEADERS, timeout=10)
+        r = _session.get("https://discord.com/api/v10/users/@me", timeout=10)
         r.raise_for_status()
         return r.json()["id"]
     except Exception as e:
@@ -117,7 +139,7 @@ def _get_bot_id():
 def _post_embed(payload):
     params = {"wait": "true"} if BOT_TOKEN else {}
     try:
-        r = requests.post(WEBHOOK_URL, json=payload, params=params, timeout=10)
+        r = _session.post(WEBHOOK_URL, json=payload, params=params, timeout=10)
         r.raise_for_status()
         return r.json().get("id")
     except Exception as e:
