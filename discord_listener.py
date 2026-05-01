@@ -60,6 +60,7 @@ def _make_session() -> requests.Session:
     s.headers.update(HEADERS)
     retry = Retry(
         total=3,
+        read=False,       # don't retry read timeouts — Discord is reachable, just slow
         backoff_factor=1,
         status_forcelist=[500, 502, 503, 504],
         allowed_methods=["GET", "POST"],
@@ -83,6 +84,9 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout),
     ],
 )
+# Suppress urllib3's internal "Retrying..." warnings — our listener already
+# logs a clean warning when the final attempt fails.
+logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 log = logging.getLogger("listener")
 
 # ── State ─────────────────────────────────────────────────────────────────────
