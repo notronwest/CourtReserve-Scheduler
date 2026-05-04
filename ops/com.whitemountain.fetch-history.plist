@@ -7,7 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/notronwest/data/court_reserve_scheduling/run_fetch_history.sh</string>
+        <string>/Users/notronwest/data/court_reserve_scheduling/scripts/run_fetch_history.sh</string>
     </array>
 
     <!-- Run every Monday at 7:00 AM (Weekday 2 = Monday) -->
