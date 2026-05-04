@@ -757,9 +757,12 @@ def _parse_approval(text: str, n_recs: int):
             break
 
     # Positive affirmations → book all
+    # Note: "" is intentionally excluded — empty content means an embed/attachment,
+    # not a human approval. Auto-booking on embeds caused the recommendation message
+    # itself to trigger an immediate booking.
     _all_words = {"all", "yes", "y", "yep", "yeah", "ok", "okay", "sure",
                   "go", "do it", "sounds good", "great", "perfect",
-                  "them", "them all", "everything", ""}
+                  "them", "them all", "everything"}
     if t in _all_words:
         return list(range(n_recs))
 
@@ -830,8 +833,14 @@ def main():
             # Always advance cursor
             _state["last_message_id"] = msg_id
 
-            # Skip our own messages
+            # Skip our own messages (bot posts)
             if bot_id and author_id == bot_id:
+                continue
+
+            # Skip embed-only messages (webhooks posting embeds have empty content).
+            # Without this guard, the recommendations embed itself would be seen as
+            # an empty-string approval and trigger immediate booking.
+            if not content:
                 continue
 
             # ── Check for !help command ──────────────────────────────────────
