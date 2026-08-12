@@ -88,6 +88,32 @@ async function bookOne(cr: CourtReserveClient, rec: RecommendationDict): Promise
   return result
 }
 
+/**
+ * Book a list of recommendations directly — no Discord, no approval gate.
+ * Used by the daily scheduler's auto-book mode. Logs each result; returns totals.
+ */
+export async function bookAll(
+  cr: CourtReserveClient,
+  recs: RecommendationDict[],
+  log: (m: string) => void = noop,
+): Promise<{ booked: number; failed: number }> {
+  let booked = 0
+  let failed = 0
+  for (const rec of recs) {
+    const result = await bookOne(cr, rec)
+    const where = `${rec.date} ${rec.start_time} Court #${rec.court_num} ${rec.level}`
+    if (result.success) {
+      booked++
+      log(`  ✅ booked ${where}`)
+    } else {
+      failed++
+      log(`  ❌ FAILED ${where} — ${result.error ?? 'unknown error'}`)
+    }
+  }
+  log(`Auto-book done: ${booked} booked, ${failed} failed`)
+  return { booked, failed }
+}
+
 // ── Daily approval booking (with retry loop) ───────────────────────────────────
 
 export async function executeBookings(

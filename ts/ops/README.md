@@ -11,6 +11,11 @@ through the `courtreserve-api` HTTP service — nothing here drives a browser.
 | `com.whitemountain.scheduler` | `run-scheduler.sh` → `cli.ts schedule <14d-out>` | daily 8:00 AM |
 | `com.whitemountain.fetch-history` | `run-fetch-history.sh` → `jobs/fetchHistory.ts` | Mondays 7:00 AM |
 | `com.whitemountain.check-waitlists` | `run-check-waitlists.sh` → `jobs/checkWaitlists.ts` | 9/11/13/15/17 daily |
+| `com.whitemountain.checkin` | `run-checkin.sh` → `jobs/checkinPast.ts --execute --days 8` | Mondays 6:00 AM |
+
+**Auto-book:** the `schedule` command now books directly (silent — no Discord
+approval gate). `--recommend` reverts to the post-and-approve flow; `--dry-run`
+previews without booking.
 
 Wrappers add `/opt/homebrew/bin` to `PATH` (launchd's PATH is minimal) and `cd`
 into `ts/` before running `npx tsx`.

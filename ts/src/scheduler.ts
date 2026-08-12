@@ -28,6 +28,8 @@ export interface SchedulerResult {
   recommendations: Recommendation[]
   stats: Stats
   messageId: string | null
+  booked?: number
+  failed?: number
 }
 
 /** Write pending_approval.json in the exact shape the listener + Python read. */
@@ -52,7 +54,7 @@ export function savePendingApproval(
 export async function runScheduler(
   targetDate: string,
   deps: SchedulerDeps,
-  opts: { dryRun?: boolean; llm?: boolean } = {},
+  opts: { dryRun?: boolean; llm?: boolean; autoBook?: boolean } = {},
 ): Promise<SchedulerResult> {
   const log = deps.log ?? (() => {})
   const useLlm = opts.llm ?? true
@@ -64,6 +66,14 @@ export async function runScheduler(
     ? await recommendLlm(items, targetDate, deps.policy, { historyPath: deps.historyPath })
     : recommend(items, targetDate, deps.policy)
   log(`Generated ${recommendations.length} recommendation(s) [source=${stats.rec_source}]`)
+
+  // Auto-book mode: book directly, no Discord and no approval gate.
+  if (opts.autoBook && !opts.dryRun) {
+    log(`Auto-booking ${recommendations.length} event(s) for ${targetDate}…`)
+    const { bookAll } = await import('./discord/execute')
+    const { booked, failed } = await bookAll(deps.cr, recommendations.map(toDict), log)
+    return { recommendations, stats, messageId: null, booked, failed }
+  }
 
   await maybeSendFixedEventsReminder(deps.rest, deps.policy)
   const messageId = await sendRecommendations(
