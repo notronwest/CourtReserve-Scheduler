@@ -16,6 +16,9 @@ export interface OperatingWindow {
 
 export interface FixedEvent {
   name: string
+  /** Real Court Reserve EventId. When set, Pass 0 books this distinct event
+   *  instead of mapping the slot to the level's generic Open Play event. */
+  event_id?: number
   day_of_week: string
   start_time: string // "HH:MM"
   end_time: string // "HH:MM"
