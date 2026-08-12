@@ -114,4 +114,25 @@ describe('runScheduler', () => {
     expect(posted.length).toBeGreaterThanOrEqual(1)
     expect(existsSync(resolve(tmp, 'pending_approval.json'))).toBe(false)
   })
+
+  it('auto-book mode books directly — silent (no Discord), no pending file', async () => {
+    const posted: unknown[] = []
+    const booked: unknown[] = []
+    const d = {
+      ...deps(posted),
+      cr: {
+        schedule: async () => scheduleItems,
+        book: async (r: unknown) => {
+          booked.push(r)
+          return { success: true, occurrence_id: 111 }
+        },
+        setCourts: async () => ({ success: true }),
+      } as never,
+    }
+    const res = await runScheduler(DATE, d, { llm: false, autoBook: true })
+    expect(res.booked).toBe(res.recommendations.length)
+    expect(booked.length).toBe(res.recommendations.length)
+    expect(posted.length).toBe(0) // silent — no Discord post
+    expect(existsSync(resolve(tmp, 'pending_approval.json'))).toBe(false)
+  })
 })

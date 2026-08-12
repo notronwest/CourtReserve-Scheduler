@@ -15,7 +15,7 @@ OPS="$(cd "$(dirname "$0")" && pwd)"          # ts/ops
 BACKUP="$LA/.python-plist-backup"
 mkdir -p "$BACKUP" "$HOME/Library/Logs/court_reserve"
 
-LABELS=(listener scheduler fetch-history check-waitlists)
+LABELS=(listener scheduler fetch-history check-waitlists checkin)
 for name in "${LABELS[@]}"; do
   label="com.whitemountain.$name"
   installed="$LA/$label.plist"

@@ -211,8 +211,8 @@ async function handleSchedule(ctx: ListenerCtx, text: string): Promise<void> {
     )
     return
   }
-  ctx.log(`!schedule command: generating recommendations for ${dateStr}`)
-  await ctx.rest.postMessage(`⏳ Generating recommendations for **${dayLabel(dateStr)}**…`)
+  ctx.log(`!schedule command: adding events for ${dateStr}`)
+  await ctx.rest.postMessage(`🏗️ Adding events for **${dayLabel(dateStr)}**… (auto-book)`)
   ctx.spawnSchedule(dateStr)
 }
 

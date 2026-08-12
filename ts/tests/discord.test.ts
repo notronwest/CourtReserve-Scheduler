@@ -308,7 +308,7 @@ describe('processMessage routing', () => {
     })
     await processMessage(ctx, '!schedule friday')
     expect(spawnedFor).toBe('7/10/2026')
-    expect(posted.messages[0]).toContain('Generating recommendations')
+    expect(posted.messages[0]).toContain('Adding events')
   })
 
   it('!schedule with a bad date explains the format', async () => {

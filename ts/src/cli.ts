@@ -62,16 +62,20 @@ async function main(): Promise<void> {
     }
 
     case 'schedule': {
-      // Full daily flow: generate → post to Discord → save pending_approval.json.
+      // Default: generate → book directly (silent, no Discord approval gate).
+      // --recommend reverts to the Discord post + approval flow; --dry-run previews.
       const [date] = positional
       if (!date) {
-        console.error('usage: schedule <M/D/YYYY> [--dry-run] [--no-llm]')
+        console.error('usage: schedule <M/D/YYYY> [--recommend] [--dry-run] [--no-llm]')
         process.exit(1)
       }
-      for (const k of ['DISCORD_WEBHOOK_URL']) {
-        if (!process.env[k]) {
-          console.error(`${k} required for schedule (use "recommend" for a Discord-free preview)`)
-          process.exit(1)
+      const autoBook = !flags.has('--recommend') && !flags.has('--dry-run')
+      if (!autoBook) {
+        for (const k of ['DISCORD_WEBHOOK_URL']) {
+          if (!process.env[k]) {
+            console.error(`${k} required for --recommend (use "recommend" for a Discord-free preview)`)
+            process.exit(1)
+          }
         }
       }
       const rest = new DiscordRest({
@@ -89,9 +93,13 @@ async function main(): Promise<void> {
           historyPath: resolve(logsDir(), '..', 'history', 'history_latest.json'),
           log: (m) => console.log(`${new Date().toISOString()}  ${m}`),
         },
-        { dryRun: flags.has('--dry-run'), llm: !flags.has('--no-llm') },
+        { dryRun: flags.has('--dry-run'), llm: !flags.has('--no-llm'), autoBook },
       )
-      console.log(`Done: ${result.recommendations.length} rec(s), source=${result.stats.rec_source}`)
+      if (autoBook) {
+        console.log(`Done: booked ${result.booked ?? 0}, failed ${result.failed ?? 0} for ${date}`)
+      } else {
+        console.log(`Done: ${result.recommendations.length} rec(s), source=${result.stats.rec_source}`)
+      }
       break
     }
 
