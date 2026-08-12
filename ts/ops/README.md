@@ -13,9 +13,17 @@ through the `courtreserve-api` HTTP service — nothing here drives a browser.
 | `com.whitemountain.check-waitlists` | `run-check-waitlists.sh` → `jobs/checkWaitlists.ts` | 9/11/13/15/17 daily |
 | `com.whitemountain.checkin` | `run-checkin.sh` → `jobs/checkinPast.ts --execute --days 8` | Mondays 6:00 AM |
 
-**Auto-book:** the `schedule` command now books directly (silent — no Discord
-approval gate). `--recommend` reverts to the post-and-approve flow; `--dry-run`
-previews without booking.
+**Auto-book:** the `schedule` command books directly (no Discord approval gate).
+`--recommend` reverts to the post-and-approve flow; `--dry-run` previews without
+booking.
+
+Every auto-book run is tracked two ways:
+- **Discord confirmation** — one embed per run listing each reservation:
+  green `✅ Booked N/N · <day>` when all land, amber/red `⚠️ Booked N/M — K failed`
+  with the error lines when any fail. Positive proof each booking worked.
+- **Booking log** — `logs/booking_log_<date>.json`, a per-run ledger of each
+  event (date/time/court/level/event_id), booked-or-failed, CR occurrence_id,
+  and a timestamp. The durable "started + completed" record.
 
 Wrappers add `/opt/homebrew/bin` to `PATH` (launchd's PATH is minimal) and `cd`
 into `ts/` before running `npx tsx`.

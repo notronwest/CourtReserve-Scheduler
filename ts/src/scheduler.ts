@@ -8,11 +8,16 @@
  * command spawns, replacing the Python `run.py`.
  */
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import type { CourtReserveClient } from './cr/client'
 import type { Policy } from './policy'
 import { recommendLlm, recommend, toDict, type Recommendation, type Stats } from './recommender'
-import { sendRecommendations, maybeSendFixedEventsReminder } from './discord/notify'
+import {
+  sendRecommendations,
+  maybeSendFixedEventsReminder,
+  sendAutoBookSummary,
+} from './discord/notify'
+import type { AutoBookResult } from './discord/execute'
 import type { DiscordRest } from './discord/rest'
 
 export interface SchedulerDeps {
@@ -51,6 +56,30 @@ export function savePendingApproval(
   writeFileSync(pendingPath, JSON.stringify(payload, null, 2))
 }
 
+/** Durable audit log of an auto-book run — one file per day, like the Python `booking_log_*.json`. */
+export function saveBookingLog(
+  logPath: string,
+  targetDate: string,
+  booked: number,
+  failed: number,
+  results: AutoBookResult[],
+): void {
+  mkdirSync(dirname(logPath), { recursive: true })
+  const payload = {
+    target_date: targetDate,
+    ran_at: new Date().toISOString(),
+    booked,
+    failed,
+    results: results.map((r) => ({
+      ...r.recommendation,
+      success: r.success,
+      occurrence_id: r.occurrence_id ?? null,
+      error: r.error ?? null,
+    })),
+  }
+  writeFileSync(logPath, JSON.stringify(payload, null, 2))
+}
+
 export async function runScheduler(
   targetDate: string,
   deps: SchedulerDeps,
@@ -67,11 +96,40 @@ export async function runScheduler(
     : recommend(items, targetDate, deps.policy)
   log(`Generated ${recommendations.length} recommendation(s) [source=${stats.rec_source}]`)
 
-  // Auto-book mode: book directly, no Discord and no approval gate.
+  // Auto-book mode: book directly, no approval gate. Keep a durable booking log,
+  // and post a Discord confirmation of the run (green = all booked, amber/red on
+  // failures) so there's positive proof each reservation landed.
   if (opts.autoBook && !opts.dryRun) {
     log(`Auto-booking ${recommendations.length} event(s) for ${targetDate}…`)
     const { bookAll } = await import('./discord/execute')
-    const { booked, failed } = await bookAll(deps.cr, recommendations.map(toDict), log)
+    const results = await bookAll(deps.cr, recommendations.map(toDict), log)
+    const booked = results.filter((r) => r.success).length
+    const failed = results.length - booked
+
+    const logPath = resolve(
+      dirname(deps.pendingPath),
+      `booking_log_${targetDate.replace(/\//g, '-')}.json`,
+    )
+    saveBookingLog(logPath, targetDate, booked, failed, results)
+
+    try {
+      await sendAutoBookSummary(
+        deps.rest,
+        targetDate,
+        results.map((r) => ({
+          event_name: r.recommendation.event_name,
+          level: r.recommendation.level,
+          start_time: r.recommendation.start_time,
+          end_time: r.recommendation.end_time,
+          court_num: r.recommendation.court_num,
+          success: r.success,
+          error: r.error,
+        })),
+      )
+    } catch (e) {
+      log(`Confirmation could not be posted: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
     return { recommendations, stats, messageId: null, booked, failed }
   }
 
