@@ -88,30 +88,39 @@ async function bookOne(cr: CourtReserveClient, rec: RecommendationDict): Promise
   return result
 }
 
+export interface AutoBookResult {
+  recommendation: RecommendationDict
+  success: boolean
+  occurrence_id?: number
+  error?: string
+}
+
 /**
  * Book a list of recommendations directly — no Discord, no approval gate.
- * Used by the daily scheduler's auto-book mode. Logs each result; returns totals.
+ * Used by the daily scheduler's auto-book mode. Logs each result; returns the
+ * per-event outcomes (for the booking log + failure alert).
  */
 export async function bookAll(
   cr: CourtReserveClient,
   recs: RecommendationDict[],
   log: (m: string) => void = noop,
-): Promise<{ booked: number; failed: number }> {
-  let booked = 0
-  let failed = 0
+): Promise<AutoBookResult[]> {
+  const results: AutoBookResult[] = []
   for (const rec of recs) {
-    const result = await bookOne(cr, rec)
+    const r = await bookOne(cr, rec)
     const where = `${rec.date} ${rec.start_time} Court #${rec.court_num} ${rec.level}`
-    if (result.success) {
-      booked++
-      log(`  ✅ booked ${where}`)
-    } else {
-      failed++
-      log(`  ❌ FAILED ${where} — ${result.error ?? 'unknown error'}`)
-    }
+    if (r.success) log(`  ✅ booked ${where}`)
+    else log(`  ❌ FAILED ${where} — ${r.error ?? 'unknown error'}`)
+    results.push({
+      recommendation: rec,
+      success: r.success,
+      occurrence_id: r.occurrence_id,
+      error: r.error,
+    })
   }
-  log(`Auto-book done: ${booked} booked, ${failed} failed`)
-  return { booked, failed }
+  const booked = results.filter((r) => r.success).length
+  log(`Auto-book done: ${booked} booked, ${results.length - booked} failed`)
+  return results
 }
 
 // ── Daily approval booking (with retry loop) ───────────────────────────────────

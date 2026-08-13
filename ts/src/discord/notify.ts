@@ -348,6 +348,54 @@ export function sendBookingResults(
   return rest.postEmbed(buildBookingResultsEmbed(results, targetDate, attempt, maxAttempts))
 }
 
+export interface AutoBookSummaryItem {
+  event_name: string
+  level: string
+  start_time: string
+  end_time: string
+  court_num: number
+  success: boolean
+  error?: string
+}
+
+/** Post a confirmation of an auto-book run: green when all booked, amber if some
+ *  failed, red if none. Lists each reservation so you can see it worked. */
+export function sendAutoBookSummary(
+  rest: DiscordRest,
+  targetDate: string,
+  results: AutoBookSummaryItem[],
+): Promise<string | null> {
+  const booked = results.filter((r) => r.success)
+  const failed = results.filter((r) => !r.success)
+  const total = results.length
+
+  const lines = results.map((r) => {
+    const emoji = LEVEL_EMOJI[r.level] ?? '⚪'
+    const mark = r.success ? '✅' : '❌'
+    const base = `${mark} ${emoji} ${r.start_time} – ${r.end_time}  Court #${r.court_num} — ${r.event_name}`
+    return r.success ? base : `${base}\n  ↳ _${(r.error ?? 'unknown error').replace(/\n/g, ' ')}_`
+  })
+
+  const color = failed.length === 0 ? 0x2ecc71 : booked.length === 0 ? 0xe74c3c : 0xf39c12
+  const icon = failed.length === 0 ? '✅' : '⚠️'
+  const title =
+    `${icon} Booked ${booked.length}/${total}` +
+    (failed.length ? ` — ${failed.length} failed` : '') +
+    ` · ${dayLabel(targetDate)}`
+
+  return rest.postEmbed({
+    embeds: [
+      {
+        title,
+        color,
+        description: (lines.join('\n') || '_No events to book._').slice(0, 3900),
+        footer: { text: `White Mountain Pickleball • Court Reserve Scheduler • ${HOSTNAME}` },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  })
+}
+
 export async function maybeSendFixedEventsReminder(
   rest: DiscordRest,
   policy: FixedEventsPolicy,
