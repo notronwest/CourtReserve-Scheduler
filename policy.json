@@ -45,6 +45,8 @@
     "note": "Recurring weekly events that are always on the schedule. Used by the recommender for saturation calculations and to avoid recommending conflicting events. Courts and max_participants are informational.",
     "status": "ACTIVE",
     "defined_on": "2026-04-09",
+    "womens_only_caveat": "KNOWN GAP (found 2026-09-01): a fixed event is booked by Pass 0 via LEVEL_TO_EVENT_ID (level -> approved co-ed event id), and recommender.add() uses APPROVED_EVENTS[eid]['name'], discarding this entry's own name. approved_events holds only the 5 co-ed Open Play ids, so no women's-only or named 'Level Play' event can be booked correctly. Any entry here whose real Court Reserve series has its own event id (the two Women's entries, the three 'Level Play' entries) causes Pass 0 to book a CO-ED clone at the same hour on a different free court, because the real series' event id is not in approved_events and so never increments event_counts. Fix requires an event_id override field on fixed events + a booked/informational flag. Tracked separately; do not add more such entries until then.",
+    "pass0_min_gap_caveat": "KNOWN GAP (found 2026-09-01): Pass 0 checks only _max_occ_for(eid) before add(); it never calls event_gap_ok(). Two fixed events of the same level at the same hour therefore book the same event id twice with zero gap, violating hard_constraint 3b.",
     "events": [
       {
         "name": "Co-Ed 3.75+ Level Play",
@@ -55,12 +57,30 @@
         "level": "Advanced"
       },
       {
+        "name": "Co-ed Intermediate Open Play",
+        "day_of_week": "Monday",
+        "start_time": "16:00",
+        "end_time": "18:00",
+        "courts": 1,
+        "level": "Intermediate",
+        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
+      },
+      {
         "name": "Women's Advanced Contract Time",
         "day_of_week": "Tuesday",
         "start_time": "16:00",
         "end_time": "18:00",
         "courts": 1,
         "level": "Advanced"
+      },
+      {
+        "name": "Co-ed Intermediate Open Play",
+        "day_of_week": "Tuesday",
+        "start_time": "11:00",
+        "end_time": "13:00",
+        "courts": 1,
+        "level": "Intermediate",
+        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
       },
       {
         "name": "Co-ed 3.5-3.75+ Level Play",
@@ -106,10 +126,11 @@
       {
         "name": "Women's Intermediate Open Play",
         "day_of_week": "Friday",
-        "start_time": "09:00",
-        "end_time": "11:00",
+        "start_time": "10:00",
+        "end_time": "12:00",
         "courts": 1,
-        "level": "Intermediate"
+        "level": "Intermediate",
+        "note": "Moved 09:00 -> 10:00 on 2026-09-01 by club management. WOMEN'S ONLY — the real recurring series lives in Court Reserve under its own event id. This entry exists so the recommender accounts for the hour; Pass 0 cannot book it correctly (it maps level -> approved co-ed event id). See fixed_events.womens_only_caveat."
       },
       {
         "name": "Co-Ed up to 3.25 Level Play",
