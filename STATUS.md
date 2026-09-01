@@ -5,6 +5,7 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+
 ## 2026-09-01 — Permanent Intermediate slots (policy change, partly blocked)
 
 **State:** `policy.json` `fixed_events` updated on branch
