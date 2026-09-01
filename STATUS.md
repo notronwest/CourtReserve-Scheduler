@@ -5,6 +5,52 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 — Permanent Intermediate slots (policy change, partly blocked)
+
+**State:** `policy.json` `fixed_events` updated on branch
+`policy/intermediate-permanent-slots` (commit `5d1ef90`) with explicit business
+approval from club management. **Not pushed, no PR, nothing booked on Court
+Reserve yet.** Two of four requested slots are blocked on a Pass 0 defect.
+
+### ✅ Done
+- **Monday 16:00–18:00** Co-ed Intermediate Open Play — added.
+- **Tuesday 11:00–13:00** Co-ed Intermediate Open Play — added.
+- **Friday Women's Intermediate 09:00–11:00 → 10:00–12:00** — moved in policy.
+- Verified offline via `recommender.recommend()` with an empty schedule: Mon/Tue/Fri
+  emit exactly the requested slots. TS shares this `policy.json` — typecheck clean,
+  75/75 tests pass.
+
+### ⚠️ Two Pass 0 defects found while verifying (recorded in `policy.json`)
+- **`fixed_events.womens_only_caveat`** — Pass 0 books via `LEVEL_TO_EVENT_ID`
+  (level → approved co-ed event id) and `add()` uses `APPROVED_EVENTS[eid]["name"]`,
+  discarding the entry's own name. Any fixed event whose real Court Reserve series
+  has its own event id (both Women's entries, all three "Level Play" entries) gets a
+  **co-ed clone booked at the same hour on a different free court** — the real series'
+  id is not in `approved_events`, so it never increments `event_counts`. Verified: with
+  the real Women's series live on Court #4, Pass 0 still books Co-ed Intermediate on
+  Court #1 at 09:00–11:00. **This is live in production today, every Friday.**
+- **`fixed_events.pass0_min_gap_caveat`** — Pass 0 checks only `_max_occ_for(eid)`,
+  never `event_gap_ok()`, so two same-level entries at one hour double-book the same
+  event id with zero gap, violating hard constraint 3b.
+
+### ⛔ Not done
+- **Thursday 17:00–19:00 Intermediate** — requested as a *separate* event alongside
+  "Co-Ed 3.25-3.5 Level Play", but that entry already maps to the same event id
+  (1931656). Adding it produced two identical `Co-ed Intermediate Open Play`
+  occurrences at 17:00–19:00 on courts 2 and 3. Held.
+- **Friday women's slot is policy-only.** The move keeps the recommender's model
+  honest, but Pass 0 cannot *book* a women's-only event. The real recurring series
+  must be moved in Court Reserve by hand.
+
+### 🔜 Next
+- **Decide the backfill.** Days 9/2–9/14 were already booked under the old policy;
+  the daily job picks up the new policy from 9/16. Gap needing new bookings:
+  **Mon 9/7, Tue 9/8, Mon 9/14, Tue 9/15**. Friday moves (9/4, 9/11) are Court
+  Reserve series edits, not bookings.
+- **Fix Pass 0** before adding any further named/gendered fixed events: add an
+  `event_id` override field and a `booked` vs `informational` flag on fixed events,
+  and call `event_gap_ok()` in Pass 0.
+- Push the branch and open a PR.
 
 ## 2026-07-08 — TS rewrite through Phase 5 (all jobs ported)
 
