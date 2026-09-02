@@ -5,6 +5,7 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+
 ## 2026-09-01 (3) — `!book`/`!move` can't address women's events; fix identified
 
 **State:** Analysis only, no code or policy changes since `58ab413`+. Working tree
