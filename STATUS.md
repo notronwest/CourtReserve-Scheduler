@@ -5,6 +5,44 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 (4) — Women's Intermediate wired into `approved_events`
+
+**State:** `8c31942` on `policy/intermediate-permanent-slots`. TS typecheck clean,
+75/75 tests pass, tree clean. **Still unpushed — the live listener has not got this.**
+
+### ✅ Done
+- **Added `1240908` "Women's Intermediate Open Play"** to `policy.json` →
+  `approved_events`. `llm_parser` builds its whole event vocabulary from that block
+  (`llm_parser.py:43`), so `!book`/`!move womens intermediate` now resolves to the real
+  series instead of falling back to co-ed `1931656`.
+- **Guarded the last-wins hazard this introduces.** The new entry shares level
+  `"Intermediate"` with the co-ed event, and any `{level -> event_id}` map built by
+  iteration resolves that level to whichever entry lands last. Both such maps now skip
+  `womens:true`: `fix_imbalance.py` `_BY_LEVEL` (`INT_EVENT_ID`) and
+  `ts/src/jobs/fixImbalance.ts` `buildCtx` (`intEventId`). Verified after the change —
+  both still resolve Intermediate → `1931656`.
+- `recommender.py` unaffected (hardcodes its own `APPROVED_EVENTS`, line 24).
+- **No listener restart needed for policy-only changes**: `load_policy()` is called
+  inside the handlers (`discord_listener.py:647/824/881`), not at import.
+
+### ⚠️ Open risks
+- **`1240908` is UNVERIFIED.** Supplied by Ron from the Court Reserve Events/Edit URL,
+  not confirmed against Court Reserve. A wrong id books occurrences of some other
+  event. Flagged in the entry's `note`. **Verify before confirming the first booking.**
+- **Wednesday "Women's Advanced Intermediate Open Play" id still missing** — same
+  defect, still unaddressable by `!book`/`!move`.
+- **`DEPLOYMENT.md` does not exist**, though `CLAUDE.md` states the repo has one and
+  requires reading it before anything that ships. Real doc/reality drift; no written
+  answer for how this repo reaches the club mini.
+
+### 🔜 Next
+- Verify `1240908`; get the Wednesday women's id; push the branch / open a PR and get
+  the file onto whichever machine runs the listener.
+- Friday women's recurring series still needs its 09:00 → 10:00 move **by hand** in
+  Court Reserve (`!move` shifts single occurrences only).
+- Carried over: four surgical `!book` backfills (Mon 9/7, Tue 9/8, Mon 9/14, Tue 9/15);
+  the Pass 0 `event_gap_ok()` + `event_id`-override fix that unblocks the held Thursday
+  slot; write `DEPLOYMENT.md`.
 
 ## 2026-09-01 (3) — `!book`/`!move` can't address women's events; fix identified
 
