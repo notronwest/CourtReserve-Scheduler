@@ -5,6 +5,47 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 (3) — `!book`/`!move` can't address women's events; fix identified
+
+**State:** Analysis only, no code or policy changes since `58ab413`+. Working tree
+clean. Ron tried `!book womens intermediate 9/4 10am` in Discord; the preview came
+back as **Co-ed Intermediate Open Play, Fri 9/4 10:00–12:00, Court #1** — told him to
+reply `cancel`, since confirming would book a co-ed session competing with the real
+women's one.
+
+### ✅ Root cause (verified)
+- **Not a parsing bug.** `llm_parser.py:43` builds the parser's entire event
+  vocabulary from `policy["approved_events"]` — only the 5 co-ed Open Play events —
+  and the prompt instructs *"If the request is ambiguous about level, pick the closest
+  match."* So "womens intermediate" → `1931656` Co-ed Intermediate. Working as written.
+- **`!move` is equally blocked.** `_execute_move` (`discord_listener.py:648`) matches
+  the live schedule on the `event_id` that same parser returns, so it searches for the
+  co-ed id, misses the real women's series, and reports "couldn't find."
+- **`recommender.py` hardcodes `APPROVED_EVENTS` at line 24** and never reads
+  `policy["approved_events"]`. This **contradicts
+  `governance.eventid_whitelist_change_policy`**, which says ids live in policy.json
+  and must not be hardcoded in recommender.py. Editing policy alone does not change
+  recommender behavior — a real trap for a later session.
+- Consumers of `policy["approved_events"]`: `llm_parser`, `discord_listener` (level
+  emoji), `fix_imbalance`, `check_waitlists`, `checkin_past`, and the TS mirrors.
+  **Not** `recommender.py`.
+
+### 🔜 Next — blocked on two event ids from Ron
+- **Add the women's events to `policy.json` → `approved_events`.** Safe *because* the
+  recommender hardcodes its own dict: the addition reaches `llm_parser` (the goal)
+  without touching Pass 0 or `LEVEL_TO_EVENT_ID`. ⚠️ That map is
+  `{v["level"]: k for ...}` — **last-wins** — so a second "Intermediate" entry added to
+  *recommender.py* would silently hijack the co-ed booking id. Do not mirror it there.
+- **Need the real Court Reserve event ids** for "Women's Intermediate Open Play" and
+  "Women's Advanced Intermediate Open Play" (Wednesday, same defect). No `history/` or
+  `logs/` on this machine — it is not the club mini. Either Ron reads them from
+  `app.courtreserve.com/Events/Edit/{event_id}`, or a read-only schedule fetch grabs
+  them (takes `logs/browser.lock`, contends with the listener).
+- Friday women's recurring series still needs its 09:00 → 10:00 move done **by hand**
+  in Court Reserve; `!move` only shifts single occurrences.
+- Still open from prior entries: the four surgical `!book` backfills (Mon 9/7, Tue 9/8,
+  Mon 9/14, Tue 9/15), the Pass 0 `event_gap_ok()` fix + `event_id` override that would
+  unblock the held Thursday slot, and pushing `policy/intermediate-permanent-slots`.
 
 ## 2026-09-01 (later) — Backfill decided: do NOT re-run `--book` on booked days
 
