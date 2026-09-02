@@ -5,6 +5,38 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 (5) — Both women's events addressable; archiving behaviour documented
+
+**State:** `f02ea5d` on `policy/intermediate-permanent-slots`. Typecheck clean,
+75/75 pass, tree clean. **Still unpushed.**
+
+### ✅ Done
+- **Added `1717124` "Women's Advanced Intermediate Open Play"** (Wednesday 15:00–17:00)
+  to `approved_events`. Both women's series are now addressable by `!book`/`!move`.
+- **Guard re-verified with two `womens:true` entries present** — `AI_EVENT_ID` →
+  `1672774`, `INT_EVENT_ID` → `1931656`. The level collision did not leak.
+- **Documented Court Reserve event archiving** in `CLAUDE.md` → Book Event Technical
+  Notes: an event with **no future instances is archived** and vanishes from the events
+  list; it is only visible by widening the list's date range back to **1/15/2025**.
+  That is how a dormant series' `event_id` is recovered. A "missing" event is usually
+  archived, not deleted — check before creating a duplicate.
+
+### ⚠️ Open risks
+- **Both ids remain UNVERIFIED** (`1240908`, `1717124`) — supplied from the Events/Edit
+  URL, not confirmed against Court Reserve.
+- **Verification method changed by the archiving fact.** A schedule fetch for a given
+  date only shows a series that has an instance *that day*; a dormant/archived series
+  won't appear. Verify via the **events list widened to 1/15/2025**, not a day fetch.
+
+### 🔜 Next
+- Verify both ids the archived-safe way; push the branch / open a PR and get the file
+  onto whichever machine runs the listener (no restart needed — `load_policy()` is
+  called inside the handlers).
+- Friday women's series still needs its 09:00 → 10:00 move **by hand** in Court Reserve.
+- Carried over: four surgical `!book` backfills (Mon 9/7, Tue 9/8, Mon 9/14, Tue 9/15);
+  Pass 0 `event_gap_ok()` + `event_id`-override fix (unblocks the held Thursday slot);
+  write the missing `DEPLOYMENT.md`.
+
 ## 2026-09-01 (4) — Women's Intermediate wired into `approved_events`
 
 **State:** `8c31942` on `policy/intermediate-permanent-slots`. TS typecheck clean,
