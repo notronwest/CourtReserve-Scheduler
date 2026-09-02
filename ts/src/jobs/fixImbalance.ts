@@ -21,7 +21,7 @@ interface Courts {
   [id: string]: { number: number; label?: string }
 }
 interface ApprovedEvents {
-  [id: string]: { name: string; level: string }
+  [id: string]: { name: string; level: string; womens?: boolean }
 }
 
 interface Ctx {
@@ -37,7 +37,13 @@ function buildCtx(policy: Policy): Ctx {
   const courts = policy.courts as unknown as Courts
   const approved = policy.approved_events as unknown as ApprovedEvents
   const byLevel: Record<string, string> = {}
-  for (const [eid, info] of Object.entries(approved)) byLevel[info.level] = eid
+  // Skip womens:true entries — they share a `level` with a co-ed event and this
+  // map is last-wins, so without the guard intEventId silently points at the
+  // women's event and this job books the wrong one.
+  for (const [eid, info] of Object.entries(approved)) {
+    if (info.womens) continue
+    byLevel[info.level] = eid
+  }
   const courtIdsByPref = Object.keys(courts).sort((a, b) => {
     const an = courts[a].number === 4 ? 0 : 1
     const bn = courts[b].number === 4 ? 0 : 1

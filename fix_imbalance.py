@@ -42,7 +42,14 @@ APPROVED      = POLICY["approved_events"]          # str(id) -> {name, level}
 COURTS        = POLICY["courts"]                   # str(id) -> {number, label}
 
 # Approved event IDs by level
-_BY_LEVEL = {info["level"]: eid for eid, info in APPROVED.items()}
+# Level -> event id. Skip womens:true entries: they share a "level" with a co-ed
+# event, and this map is last-wins — without the guard, adding a women's event
+# silently repoints INT_EVENT_ID at it and this job books the wrong event.
+_BY_LEVEL = {
+    info["level"]: eid
+    for eid, info in APPROVED.items()
+    if not info.get("womens")
+}
 AI_EVENT_ID   = int(_BY_LEVEL["Advanced Intermediate"])
 INT_EVENT_ID  = int(_BY_LEVEL["Intermediate"])
 

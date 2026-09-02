@@ -5,6 +5,59 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 — Permanent Intermediate slots + women's events made addressable
+
+**State:** merged main (which landed the `event_id` override, `DEPLOYMENT.md`, and the
+TS launchd/cutover work) into `policy/intermediate-permanent-slots`, then re-applied
+this session's changes on top of main's restructured `policy.json`. PR
+[#34](https://github.com/notronwest/CourtReserve-Scheduler/pull/34).
+
+### ✅ Done
+- **New permanent Intermediate fixed events:** Monday **16:00–18:00**, Tuesday
+  **11:00–13:00**.
+- **Friday Women's Intermediate moved 09:00–11:00 → 10:00–12:00**, and pinned with
+  `event_id: 1240908`.
+- **Wednesday Women's Advanced Intermediate pinned** with `event_id: 1717124`.
+  Both use the optional `event_id` field main added in
+  [#30](https://github.com/notronwest/CourtReserve-Scheduler/pull/30).
+- **Both women's series added to `approved_events`** so `!book`/`!move` can address
+  them. `llm_parser` builds its entire event vocabulary from that block
+  (`llm_parser.py:43`), so `!book womens intermediate` previously hit the prompt's
+  "closest match" rule and silently resolved to co-ed `1931656`.
+- **Guarded the level collision this creates.** Both women's entries share a `level`
+  with a co-ed event, and `{level -> event_id}` maps built by iteration are last-wins.
+  `fix_imbalance.py` `_BY_LEVEL` and `ts/src/jobs/fixImbalance.ts` `buildCtx` now skip
+  `womens:true`. Verified with both entries present: Intermediate → `1931656`,
+  Advanced Intermediate → `1672774`.
+- **Documented Court Reserve event archiving** in `CLAUDE.md`: an event with no future
+  instances is archived and vanishes from the events list; only visible by widening the
+  range to **1/15/2025**. That is how a dormant series' `event_id` is recovered.
+
+### ⚠️ Open risks
+- **`event_id` is a TS-only fix.** `recommender.py` never reads it. Per `DEPLOYMENT.md`
+  the live launchd agents still run the **Python** stack, so in production Pass 0 still
+  books a **co-ed clone** of every distinct series at the same hour on a free court —
+  verified: with the real Women's series live on Court #4, Pass 0 still books Co-ed
+  Intermediate on Court #1. Recorded as `fixed_events.python_pass0_caveat`.
+  **Port `event_id` to `recommender.py`, or finish the TS cutover.**
+- **Both event ids are UNVERIFIED** (`1240908`, `1717124`) — read off the Events/Edit
+  URL, not confirmed against Court Reserve. The `!book` preview renders the name from
+  policy, so it will not catch a wrong id. Verify via the events list widened to
+  1/15/2025 — a single-day schedule fetch won't show a dormant series.
+- **Pushing to main deploys nothing.** A human runs `./setup.sh` on the club Mac.
+
+### 🔜 Next
+- Port the `event_id` override to `recommender.py` (or complete the cutover), then
+  `./setup.sh` on the host.
+- **Thursday 17:00–19:00 Intermediate is still held**: "Co-Ed 3.25-3.5 Level Play" has
+  no `event_id` of its own and resolves to `1931656`, so adding a second entry produced
+  two identical occurrences on courts 2 and 3 (Pass 0 never calls `event_gap_ok()` —
+  `fixed_events.pass0_min_gap_caveat`). Supply that event's real id to unblock it.
+- Friday women's **recurring series** still needs its 09:00 → 10:00 move by hand in
+  Court Reserve; `!move` shifts single occurrences only.
+- No backfill booked. A full `run.py --book` re-run on already-booked days adds ~4
+  duplicate events per day rather than skipping them; four surgical `!book`s
+  (Mon 9/7, Tue 9/8, Mon 9/14, Tue 9/15) are the route.
 
 ## 2026-07-08 — TS rewrite through Phase 5 (all jobs ported)
 

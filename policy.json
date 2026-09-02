@@ -48,12 +48,29 @@
       "name": "Co-ed Advanced Open Play",
       "level": "Advanced",
       "default_duration_hours": 2
+    },
+    "1717124": {
+      "name": "Women's Advanced Intermediate Open Play",
+      "level": "Advanced Intermediate",
+      "default_duration_hours": 2,
+      "womens": true,
+      "note": "Added 2026-09-01 by club management so !book/!move can address the Wednesday women's series. Event id from the Court Reserve Events/Edit URL — NOT independently verified."
+    },
+    "1240908": {
+      "name": "Women's Intermediate Open Play",
+      "level": "Intermediate",
+      "default_duration_hours": 2,
+      "womens": true,
+      "note": "Added 2026-09-01 by club management so !book/!move can address the Friday women's series. llm_parser builds its whole event vocabulary from approved_events (llm_parser.py:43); without this entry 'womens intermediate' fell through to co-ed 1931656. Event id from the Court Reserve Events/Edit URL — NOT independently verified."
     }
   },
+  "approved_events_womens_flag_note": "Entries flagged womens:true share a 'level' with a co-ed event. Any map built as {level -> event_id} by iteration is LAST-WINS and will silently resolve that level to the women's id. fix_imbalance.py (_BY_LEVEL) and ts/src/jobs/fixImbalance.ts (buildCtx) therefore skip womens entries. recommender.py is unaffected: it hardcodes its own APPROVED_EVENTS at line 24 and never reads this block, which contradicts governance.eventid_whitelist_change_policy.",
   "fixed_events": {
     "note": "Recurring weekly events that are always on the schedule. Used by the recommender for saturation calculations and to avoid recommending conflicting events. Courts and max_participants are informational.",
     "status": "ACTIVE",
     "defined_on": "2026-04-09",
+    "python_pass0_caveat": "KNOWN GAP (found 2026-09-01), PRODUCTION-AFFECTING: the optional event_id override added in PR #30 is implemented in ts/src/recommender.ts ONLY. recommender.py never reads event_id — its Pass 0 maps level -> approved co-ed event id and add() uses APPROVED_EVENTS[eid]['name'], discarding the entry's name. Per DEPLOYMENT.md the live launchd agents still run the PYTHON stack, so in production every fixed event whose real CR series has its own event id (both Women's entries, the Level Play entries) still gets a CO-ED clone booked at the same hour on a different free court — verified: with the real Women's series live on Court #4, Pass 0 still books Co-ed Intermediate on Court #1. Port the event_id override to recommender.py, or complete the TS cutover.",
+    "pass0_min_gap_caveat": "KNOWN GAP (found 2026-09-01): Pass 0 checks only _max_occ_for(eid) before add(); it never calls event_gap_ok(). Two fixed events resolving to the same event id at the same hour therefore book it twice with zero gap, violating hard_constraint 3b. This is why a second Thursday 17:00-19:00 Intermediate entry is NOT present: 'Co-Ed 3.25-3.5 Level Play' has no event_id of its own and resolves to 1931656, so adding one produced two identical occurrences on courts 2 and 3. Give that entry its real CR event_id to unblock it.",
     "events": [
       {
         "name": "Co-Ed 3.75+ Level Play",
@@ -63,6 +80,24 @@
         "courts": 1,
         "level": "Advanced",
         "event_id": 1982138
+      },
+      {
+        "name": "Co-ed Intermediate Open Play",
+        "day_of_week": "Monday",
+        "start_time": "16:00",
+        "end_time": "18:00",
+        "courts": 1,
+        "level": "Intermediate",
+        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
+      },
+      {
+        "name": "Co-ed Intermediate Open Play",
+        "day_of_week": "Tuesday",
+        "start_time": "11:00",
+        "end_time": "13:00",
+        "courts": 1,
+        "level": "Intermediate",
+        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
       },
       {
         "name": "Women's Advanced Contract Time",
@@ -87,7 +122,9 @@
         "end_time": "17:00",
         "courts": 2,
         "max_participants": 10,
-        "level": "Advanced Intermediate"
+        "level": "Advanced Intermediate",
+        "event_id": 1717124,
+        "note": "event_id added 2026-09-01 — pins the real CR women's series for the TS Pass 0."
       },
       {
         "name": "Co-Ed Advanced Intermediate Open Play",
@@ -116,10 +153,12 @@
       {
         "name": "Women's Intermediate Open Play",
         "day_of_week": "Friday",
-        "start_time": "09:00",
-        "end_time": "11:00",
+        "start_time": "10:00",
+        "end_time": "12:00",
         "courts": 1,
-        "level": "Intermediate"
+        "level": "Intermediate",
+        "event_id": 1240908,
+        "note": "Moved 09:00 -> 10:00 on 2026-09-01 by club management. WOMEN'S ONLY. event_id pins the real CR series so the TS Pass 0 books it as itself (see PR #30). recommender.py ignores event_id and still books a co-ed clone — see fixed_events.python_pass0_caveat."
       },
       {
         "name": "Co-Ed up to 3.25 Level Play",
