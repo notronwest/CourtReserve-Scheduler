@@ -5,6 +5,45 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-01 (later) — Backfill decided: do NOT re-run `--book` on booked days
+
+**State:** Analysis only, no code or policy changes since `b0ba403`. Working tree
+clean. The open "decide the backfill" question from the entry below is now
+**answered: a full `run.py <date> --book` re-run is off the table.**
+
+### ✅ Findings (verified, not inferred)
+- **`--book` is non-destructive.** `run.py` imports only `book_event`,
+  `fix_event_court`, `edit_occurrence_multi_court` — never `cancel_occurrence` or
+  `move_occurrence`. It only *adds* occurrences; hard constraint 1 stops it booking
+  over an existing event on the same court. **Existing sessions and their
+  registrants are never cancelled, moved, or modified.**
+- **But it does not skip already-booked days.** The recommender has *no concept of
+  registrants* — only `checkin_past.py` reads registrant counts. It sees court/time
+  occupancy only, so it books *around* a full session onto a different court at the
+  same hour.
+- **Simulated re-run on 9/7, 9/8, 9/14, 9/15** (old-policy output replayed as the
+  live calendar): each day already holds ~5 events and the re-run **adds 4 more**,
+  including a same-hour duplicate of `Co-ed Advanced Open Play` (17:00–19:00 Mondays,
+  16:00–18:00 Tuesdays) plus re-added Beginner / Advanced Beginner at 09:00.
+- **The new Intermediate slots themselves break constraint 3b** against existing
+  Intermediate sessions: 1.0h gap on Mondays, 0.0h on Tuesdays (2h required).
+- Root cause is the already-recorded `fixed_events.pass0_min_gap_caveat`: the
+  existing event sits on a *different court* so `already_on_schedule` doesn't fire,
+  and Pass 0 never calls `event_gap_ok()`. Net effect is a second competing session
+  at the same hour, splitting attendance on events that already have registrants.
+
+### 🔜 Next (unchanged targets, new preferred route)
+- **Backfill via four surgical `!book` commands** — Mon 9/7, Tue 9/8, Mon 9/14,
+  Tue 9/15 — which book only the named slot. **Precede with a read-only schedule
+  fetch** for those days to confirm the new slot isn't back-to-back with a real
+  existing Intermediate session (the table above replays old-policy output, not the
+  real calendar). That fetch takes `logs/browser.lock` and will contend with the
+  always-on listener.
+- **Or fix Pass 0 first** — call `event_gap_ok()` in Pass 0 and add an `event_id`
+  override field on fixed events. That makes re-runs safe *and* unblocks the held
+  Thursday 17:00–19:00 slot. Awaiting Ron's pick between the two.
+- Friday women's series still needs a manual move (09:00 → 10:00) in Court Reserve.
+- Branch `policy/intermediate-permanent-slots` still unpushed, no PR.
 
 ## 2026-09-01 — Permanent Intermediate slots (policy change, partly blocked)
 
