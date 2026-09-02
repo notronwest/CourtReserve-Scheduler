@@ -2,17 +2,27 @@
   "meta": {
     "version": "2026-07-06",
     "approved_by": "Club Management",
-    "source_document": "Court Reserve Calendar — Business Decisions & Policies",
+    "source_document": "Court Reserve Calendar \u2014 Business Decisions & Policies",
     "notes": "Machine-readable expression of all business decisions governing automated recommendations and manual management of the court reserve calendar. Edit this file (not the code) when policies change."
   },
-
   "courts": {
-    "52349": { "number": 1, "label": "Pickleball-Court #1" },
-    "52350": { "number": 2, "label": "Pickleball-Court #2" },
-    "52351": { "number": 3, "label": "Pickleball-Court #3" },
-    "52352": { "number": 4, "label": "Pickleball-Court #4" }
+    "52349": {
+      "number": 1,
+      "label": "Pickleball-Court #1"
+    },
+    "52350": {
+      "number": 2,
+      "label": "Pickleball-Court #2"
+    },
+    "52351": {
+      "number": 3,
+      "label": "Pickleball-Court #3"
+    },
+    "52352": {
+      "number": 4,
+      "label": "Pickleball-Court #4"
+    }
   },
-
   "approved_events": {
     "1717147": {
       "name": "Co-Ed Beginner Open Play",
@@ -44,24 +54,23 @@
       "level": "Advanced Intermediate",
       "default_duration_hours": 2,
       "womens": true,
-      "note": "Added 2026-09-01 by club management so !book/!move can address the Wednesday women's series. Event id supplied by Ron from the Court Reserve Events/Edit URL — NOT independently verified. See approved_events_womens_flag_note for the level collision guard."
+      "note": "Added 2026-09-01 by club management so !book/!move can address the Wednesday women's series. Event id from the Court Reserve Events/Edit URL — NOT independently verified."
     },
     "1240908": {
       "name": "Women's Intermediate Open Play",
       "level": "Intermediate",
       "default_duration_hours": 2,
       "womens": true,
-      "note": "Added 2026-09-01 by club management so !book/!move can address the women's series (llm_parser builds its event vocabulary from approved_events). Event id supplied by Ron from the Court Reserve Events/Edit URL — NOT independently verified against Court Reserve. UNVERIFIED: confirm before the first booking is confirmed."
+      "note": "Added 2026-09-01 by club management so !book/!move can address the Friday women's series. llm_parser builds its whole event vocabulary from approved_events (llm_parser.py:43); without this entry 'womens intermediate' fell through to co-ed 1931656. Event id from the Court Reserve Events/Edit URL — NOT independently verified."
     }
   },
-  "approved_events_womens_flag_note": "Entries flagged womens:true share a 'level' with a co-ed event. Any map built as {level -> event_id} is LAST-WINS and will silently resolve that level to the women's id. fix_imbalance.py (_BY_LEVEL) and ts/src/jobs/fixImbalance.ts (buildCtx) therefore skip womens entries when deriving level -> id. recommender.py is unaffected: it hardcodes its own APPROVED_EVENTS at line 24 and never reads this block (which itself contradicts governance.eventid_whitelist_change_policy).",
-
+  "approved_events_womens_flag_note": "Entries flagged womens:true share a 'level' with a co-ed event. Any map built as {level -> event_id} by iteration is LAST-WINS and will silently resolve that level to the women's id. fix_imbalance.py (_BY_LEVEL) and ts/src/jobs/fixImbalance.ts (buildCtx) therefore skip womens entries. recommender.py is unaffected: it hardcodes its own APPROVED_EVENTS at line 24 and never reads this block, which contradicts governance.eventid_whitelist_change_policy.",
   "fixed_events": {
     "note": "Recurring weekly events that are always on the schedule. Used by the recommender for saturation calculations and to avoid recommending conflicting events. Courts and max_participants are informational.",
     "status": "ACTIVE",
     "defined_on": "2026-04-09",
-    "womens_only_caveat": "KNOWN GAP (found 2026-09-01): a fixed event is booked by Pass 0 via LEVEL_TO_EVENT_ID (level -> approved co-ed event id), and recommender.add() uses APPROVED_EVENTS[eid]['name'], discarding this entry's own name. approved_events holds only the 5 co-ed Open Play ids, so no women's-only or named 'Level Play' event can be booked correctly. Any entry here whose real Court Reserve series has its own event id (the two Women's entries, the three 'Level Play' entries) causes Pass 0 to book a CO-ED clone at the same hour on a different free court, because the real series' event id is not in approved_events and so never increments event_counts. Fix requires an event_id override field on fixed events + a booked/informational flag. Tracked separately; do not add more such entries until then.",
-    "pass0_min_gap_caveat": "KNOWN GAP (found 2026-09-01): Pass 0 checks only _max_occ_for(eid) before add(); it never calls event_gap_ok(). Two fixed events of the same level at the same hour therefore book the same event id twice with zero gap, violating hard_constraint 3b.",
+    "python_pass0_caveat": "KNOWN GAP (found 2026-09-01), PRODUCTION-AFFECTING: the optional event_id override added in PR #30 is implemented in ts/src/recommender.ts ONLY. recommender.py never reads event_id — its Pass 0 maps level -> approved co-ed event id and add() uses APPROVED_EVENTS[eid]['name'], discarding the entry's name. Per DEPLOYMENT.md the live launchd agents still run the PYTHON stack, so in production every fixed event whose real CR series has its own event id (both Women's entries, the Level Play entries) still gets a CO-ED clone booked at the same hour on a different free court — verified: with the real Women's series live on Court #4, Pass 0 still books Co-ed Intermediate on Court #1. Port the event_id override to recommender.py, or complete the TS cutover.",
+    "pass0_min_gap_caveat": "KNOWN GAP (found 2026-09-01): Pass 0 checks only _max_occ_for(eid) before add(); it never calls event_gap_ok(). Two fixed events resolving to the same event id at the same hour therefore book it twice with zero gap, violating hard_constraint 3b. This is why a second Thursday 17:00-19:00 Intermediate entry is NOT present: 'Co-Ed 3.25-3.5 Level Play' has no event_id of its own and resolves to 1931656, so adding one produced two identical occurrences on courts 2 and 3. Give that entry its real CR event_id to unblock it.",
     "events": [
       {
         "name": "Co-Ed 3.75+ Level Play",
@@ -69,13 +78,23 @@
         "start_time": "17:00",
         "end_time": "19:00",
         "courts": 1,
-        "level": "Advanced"
+        "level": "Advanced",
+        "event_id": 1982138
       },
       {
         "name": "Co-ed Intermediate Open Play",
         "day_of_week": "Monday",
         "start_time": "16:00",
         "end_time": "18:00",
+        "courts": 1,
+        "level": "Intermediate",
+        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
+      },
+      {
+        "name": "Co-ed Intermediate Open Play",
+        "day_of_week": "Tuesday",
+        "start_time": "11:00",
+        "end_time": "13:00",
         "courts": 1,
         "level": "Intermediate",
         "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
@@ -87,15 +106,6 @@
         "end_time": "18:00",
         "courts": 1,
         "level": "Advanced"
-      },
-      {
-        "name": "Co-ed Intermediate Open Play",
-        "day_of_week": "Tuesday",
-        "start_time": "11:00",
-        "end_time": "13:00",
-        "courts": 1,
-        "level": "Intermediate",
-        "note": "Added 2026-09-01 by club management — permanent Intermediate slot."
       },
       {
         "name": "Co-ed 3.5-3.75+ Level Play",
@@ -112,7 +122,9 @@
         "end_time": "17:00",
         "courts": 2,
         "max_participants": 10,
-        "level": "Advanced Intermediate"
+        "level": "Advanced Intermediate",
+        "event_id": 1717124,
+        "note": "event_id added 2026-09-01 — pins the real CR women's series for the TS Pass 0."
       },
       {
         "name": "Co-Ed Advanced Intermediate Open Play",
@@ -145,7 +157,8 @@
         "end_time": "12:00",
         "courts": 1,
         "level": "Intermediate",
-        "note": "Moved 09:00 -> 10:00 on 2026-09-01 by club management. WOMEN'S ONLY — the real recurring series lives in Court Reserve under its own event id. This entry exists so the recommender accounts for the hour; Pass 0 cannot book it correctly (it maps level -> approved co-ed event id). See fixed_events.womens_only_caveat."
+        "event_id": 1240908,
+        "note": "Moved 09:00 -> 10:00 on 2026-09-01 by club management. WOMEN'S ONLY. event_id pins the real CR series so the TS Pass 0 books it as itself (see PR #30). recommender.py ignores event_id and still books a co-ed clone — see fixed_events.python_pass0_caveat."
       },
       {
         "name": "Co-Ed up to 3.25 Level Play",
@@ -153,7 +166,8 @@
         "start_time": "12:00",
         "end_time": "14:00",
         "courts": 1,
-        "level": "Beginner"
+        "level": "Beginner",
+        "event_id": 1986151
       },
       {
         "name": "Co-Ed Advanced Open Play",
@@ -191,30 +205,36 @@
       }
     ]
   },
-
   "utilization": {
     "target_pct": 60,
     "baseline_courts": 4,
-    "note": "Target = target_pct × (courts × window_hours). Multi-court events count N courts × duration hours toward utilization. Recommender fills to target where feasible under hard constraints."
+    "note": "Target = target_pct \u00d7 (courts \u00d7 window_hours). Multi-court events count N courts \u00d7 duration hours toward utilization. Recommender fills to target where feasible under hard constraints."
   },
-
   "operating_windows": {
     "weekday": {
-      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
+      ],
       "start": "09:00",
       "end": "20:00",
       "hours": 11,
       "note": "Extended to 20:00 on 2026-04-07 to allow 6 PM event starts."
     },
     "weekend": {
-      "days": ["Saturday", "Sunday"],
+      "days": [
+        "Saturday",
+        "Sunday"
+      ],
       "start": "09:00",
       "end": "18:00",
       "hours": 9,
-      "note": "Changed from 08:00 — only 1 eight-am session in 3 months of history (4 members). 9am is the earliest real start."
+      "note": "Changed from 08:00 \u2014 only 1 eight-am session in 3 months of history (4 members). 9am is the earliest real start."
     }
   },
-
   "required_levels": [
     "Beginner",
     "Advanced Beginner",
@@ -222,7 +242,6 @@
     "Advanced Intermediate",
     "Advanced"
   ],
-
   "hard_constraints": {
     "precedence_order_note": "Constraints are enforced in the order listed below (1 = highest priority).",
     "1_no_same_court_overlap": {
@@ -241,7 +260,7 @@
         "1672774": {
           "limit": 1,
           "level": "Advanced Intermediate",
-          "note": "Capped at 1/day — everyone self-identifies as AI, reducing Intermediate attendance. Vary start times across days to build pattern data."
+          "note": "Capped at 1/day \u2014 everyone self-identifies as AI, reducing Intermediate attendance. Vary start times across days to build pattern data."
         }
       }
     },
@@ -253,32 +272,36 @@
     "4_required_level_coverage": {
       "enabled": true,
       "description": "Recommendations must collectively include all five levels when possible. Levels already well-covered by existing events are skipped.",
-      "levels": ["Beginner", "Advanced Beginner", "Intermediate", "Advanced Intermediate", "Advanced"],
+      "levels": [
+        "Beginner",
+        "Advanced Beginner",
+        "Intermediate",
+        "Advanced Intermediate",
+        "Advanced"
+      ],
       "saturation_threshold": 2,
       "saturation_threshold_note": "If a level already has this many sessions on the target day (across all events, not just approved ones), it is considered covered and will not be forced in Pass 1. Set to 0 to always force all levels."
     },
     "5_utilization_optimization": {
       "enabled": true,
-      "description": "Generate enough non-conflicting events to reach the utilization target if feasible under constraints 1–4."
+      "description": "Generate enough non-conflicting events to reach the utilization target if feasible under constraints 1\u20134."
     },
     "6_max_concurrent_courts": {
       "limit": 3,
       "description": "No more than 3 of the 4 courts may be occupied by recommended events at the same time. At least one court must always remain free at every time slot."
     }
   },
-
   "waitlist": {
     "scan_days_ahead": 7,
     "max_courts": 4,
     "override_keep_one_free": true,
-    "note": "Waitlist expansions represent real, confirmed demand and may use ALL courts (max_courts = 4), overriding hard_constraint 6 (keep one court free). Constraint 6 governs only speculative daily recommendations; when players are actually waitlisted and a court is free, that court should be claimed. check_waitlists.py reads max_courts from here — do not hardcode the ceiling in code."
+    "note": "Waitlist expansions represent real, confirmed demand and may use ALL courts (max_courts = 4), overriding hard_constraint 6 (keep one court free). Constraint 6 governs only speculative daily recommendations; when players are actually waitlisted and a court is free, that court should be claimed. check_waitlists.py reads max_courts from here \u2014 do not hardcode the ceiling in code."
   },
-
   "recommendation_rules": {
     "min_recommendations": 5,
     "event_duration_hours": {
       "open_play": 2,
-      "note": "All Open Play sessions must be exactly 2 hours. This is a hard rule — do not recommend 1-hour open play slots."
+      "note": "All Open Play sessions must be exactly 2 hours. This is a hard rule \u2014 do not recommend 1-hour open play slots."
     },
     "preferred_block_duration_hours": {
       "weekday": 2,
@@ -289,33 +312,56 @@
       "enabled": true,
       "description": "Distribute recommendations evenly across morning, midday, afternoon, and evening rather than front-loading the earliest slots.",
       "time_bands": {
-        "morning":   { "start": "09:00", "end": "12:00" },
-        "midday":    { "start": "12:00", "end": "15:00" },
-        "afternoon": { "start": "15:00", "end": "18:00" },
-        "evening":   { "start": "18:00", "end": "20:00" }
+        "morning": {
+          "start": "09:00",
+          "end": "12:00"
+        },
+        "midday": {
+          "start": "12:00",
+          "end": "15:00"
+        },
+        "afternoon": {
+          "start": "15:00",
+          "end": "18:00"
+        },
+        "evening": {
+          "start": "18:00",
+          "end": "20:00"
+        }
       },
       "strategy": "one_per_band_first_then_fill"
     },
     "time_of_day_preference": {
-      "preferred_window": "12:00–17:00",
+      "preferred_window": "12:00\u201317:00",
       "preferred_score": 1.0,
       "off_peak_score": 0.0,
-      "description": "When historical attendance is equal (or absent), noon–5 PM slots are preferred over early morning. Used as a tiebreaker in Pass 1 and Pass 2 slot ordering. Prevents stacking of 8 AM recommendations when the schedule has no history for those slots."
+      "description": "When historical attendance is equal (or absent), noon\u20135 PM slots are preferred over early morning. Used as a tiebreaker in Pass 1 and Pass 2 slot ordering. Prevents stacking of 8 AM recommendations when the schedule has no history for those slots."
     },
     "court_fill_preference": "free_courts_first",
     "preferred_court_when_free": 4,
     "two_court_priority_pairs": [
-      [4, 3],
-      [4, 1],
-      [1, 2],
-      [2, 3]
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        3
+      ]
     ],
     "two_court_pair_note": "For 2-court events, try pairs in priority order. Both courts in the pair must be free at the same time. If no pair is free, fall back to the best available single court.",
     "approved_event_ids_only": true,
     "default_target_date": "2_weeks_from_today",
     "target_date_note": "When no date is passed to run.py, defaults to 14 days from today. Override by passing a date argument: python run.py M/D/YYYY"
   },
-
   "recommendation_engine": {
     "default": "rule_based",
     "llm_option": {
@@ -330,22 +376,29 @@
       "api_key_config": "Set ANTHROPIC_API_KEY in .env at project root. load_dotenv(override=True) is required to ensure .env values overwrite any pre-existing empty shell env vars."
     }
   },
-
   "history_analysis": {
     "time_bands": {
       "granularity": "2_hours",
-      "bands": ["0600", "0800", "1000", "1200", "1400", "1600", "1800", "2000"],
+      "bands": [
+        "0600",
+        "0800",
+        "1000",
+        "1200",
+        "1400",
+        "1600",
+        "1800",
+        "2000"
+      ],
       "note": "Each band represents a 2-hour window starting at that hour. Finer granularity vs. the prior 3-hour bands reduces false ties and improves time-slot selection."
     },
     "event_id_matching": {
       "primary": "exact event_id match against approved_events",
-      "fallback": "title-based level detection — only applied to events whose title contains 'open play' (case-insensitive). Maps detected level to the canonical approved event ID for that level.",
+      "fallback": "title-based level detection \u2014 only applied to events whose title contains 'open play' (case-insensitive). Maps detected level to the canonical approved event ID for that level.",
       "reason": "Historical records sometimes reference event IDs that differ from current approved IDs. Title matching recovers useful attendance data that would otherwise be lost."
     },
     "useful_history_entries": 57,
     "note": "History is fetched weekly and stored in history/. The recommender reads history/history_latest.json."
   },
-
   "scheduling": {
     "history_fetch": {
       "frequency": "weekly",
@@ -365,15 +418,14 @@
       "launchd_label": "com.whitemountain.scheduler"
     }
   },
-
   "booking": {
     "add_occurrence_url": "https://app.courtreserve.com/EventReservation/AddEventOccurrence?eventId={event_id}&source=EditOccurrences",
     "edit_occurrence_url": "https://app.courtreserve.com/Reservation/UpdateReservation?reservationId={occurrence_id}",
     "occurrences_list_url": "https://app.courtreserve.com/Events/Edit/{event_id}?page=occurrences",
     "url_notes": {
-      "EditEventOccurrence": "Returns 404 — does not exist as a standalone page. Use UpdateReservation instead.",
+      "EditEventOccurrence": "Returns 404 \u2014 does not exist as a standalone page. Use UpdateReservation instead.",
       "occurrence_id": "The 'Id' field returned by the schedule report API is the reservationId used in UpdateReservation. Same number, different name.",
-      "EditOnlyCurrentOccurrence": "Checkbox on UpdateReservation form — must be checked to edit only this date, not the full recurring series."
+      "EditOnlyCurrentOccurrence": "Checkbox on UpdateReservation form \u2014 must be checked to edit only this date, not the full recurring series."
     },
     "multi_court_workflow": {
       "description": "Two-court events require two steps: (1) add the occurrence on the primary court, (2) immediately edit that occurrence to assign all courts and set MaxPeople.",
@@ -385,22 +437,50 @@
     },
     "form_fields": {
       "add_form": {
-        "date":       { "id": "Date",      "kendo_widget": "kendoDatePicker" },
-        "start_time": { "id": "StartTime", "kendo_widget": "kendoTimePicker" },
-        "end_time":   { "id": "EndTime",   "kendo_widget": "kendoTimePicker" },
-        "courts":     { "id": "Courts",    "kendo_widget": "kendoMultiSelect" }
+        "date": {
+          "id": "Date",
+          "kendo_widget": "kendoDatePicker"
+        },
+        "start_time": {
+          "id": "StartTime",
+          "kendo_widget": "kendoTimePicker"
+        },
+        "end_time": {
+          "id": "EndTime",
+          "kendo_widget": "kendoTimePicker"
+        },
+        "courts": {
+          "id": "Courts",
+          "kendo_widget": "kendoMultiSelect"
+        }
       },
       "edit_form": {
-        "start_time":        { "id": "StartTime",               "kendo_widget": "kendoTimePicker" },
-        "end_time":          { "id": "EndTime",                 "kendo_widget": "kendoTimePicker" },
-        "courts":            { "id": "Courts",                  "kendo_widget": "kendoMultiSelect" },
-        "max_participants":  { "id": "MaxPeople",               "type": "number", "note": "Only available on edit form. Set to 8 for 2-court events (4 per court)." },
-        "edit_only_current": { "id": "EditOnlyCurrentOccurrence", "type": "checkbox", "must_be_checked": true }
+        "start_time": {
+          "id": "StartTime",
+          "kendo_widget": "kendoTimePicker"
+        },
+        "end_time": {
+          "id": "EndTime",
+          "kendo_widget": "kendoTimePicker"
+        },
+        "courts": {
+          "id": "Courts",
+          "kendo_widget": "kendoMultiSelect"
+        },
+        "max_participants": {
+          "id": "MaxPeople",
+          "type": "number",
+          "note": "Only available on edit form. Set to 8 for 2-court events (4 per court)."
+        },
+        "edit_only_current": {
+          "id": "EditOnlyCurrentOccurrence",
+          "type": "checkbox",
+          "must_be_checked": true
+        }
       }
     },
     "save_button_selector": "button:has-text('Save'):not(:has-text('Register'))"
   },
-
   "post_booking": {
     "results_discord_post": {
       "enabled": true,
@@ -408,7 +488,7 @@
     },
     "dry_run_discord_preview": {
       "enabled": true,
-      "description": "When run with --dry-run, recommendations are posted to Discord immediately as a preview (labeled '👀 Preview — not booking') without waiting for an approval reply. Allows reviewing what would be booked before committing."
+      "description": "When run with --dry-run, recommendations are posted to Discord immediately as a preview (labeled '\ud83d\udc40 Preview \u2014 not booking') without waiting for an approval reply. Allows reviewing what would be booked before committing."
     },
     "retry": {
       "max_attempts": 3,
@@ -422,28 +502,27 @@
     },
     "verification": {
       "description": "After booking (and after each retry), the live schedule is re-fetched and each booked event is verified.",
-      "match_strategy": "event_id + start_time — more reliable than court label string matching",
+      "match_strategy": "event_id + start_time \u2014 more reliable than court label string matching",
       "statuses": {
         "confirmed": "Event found at correct time on correct court",
-        "wrong_court": "Event found at correct time but on different court — auto-fix triggered",
-        "no_court": "Event found at correct time with no court assigned — auto-fix triggered",
-        "not_found": "Event not on schedule at all — re-add triggered"
+        "wrong_court": "Event found at correct time but on different court \u2014 auto-fix triggered",
+        "no_court": "Event found at correct time with no court assigned \u2014 auto-fix triggered",
+        "not_found": "Event not on schedule at all \u2014 re-add triggered"
       },
       "auto_remediation": {
         "enabled": true,
-        "method": "fix_event_court() — navigates directly to UpdateReservation using occurrence_id if known, falls back to grid search, falls back to re-add",
+        "method": "fix_event_court() \u2014 navigates directly to UpdateReservation using occurrence_id if known, falls back to grid search, falls back to re-add",
         "occurrence_id_source": "Preferred: Id field from live schedule API. Fallback: captured from occurrences grid after initial booking."
       }
     }
   },
-
   "cli": {
     "main_command": "python run.py [date] [--book] [--dry-run] [--llm]",
     "fix_command": "python run.py fix <date> (--event-id ID | --name 'fragment') [--start 'H:MM AM'] --court N [--dry-run]",
     "fix_command_description": "Manually update the court assignment for a specific event occurrence. Fetches live schedule to find the occurrence ID, then edits via UpdateReservation form.",
     "flags": {
       "--book": "Execute bookings in Court Reserve after generating recommendations. Without this flag, recommendations are printed (and Discord preview posted) but nothing is booked.",
-      "--dry-run": "Generate recommendations and post a Discord preview labeled '👀 Preview — not booking'. Does not book anything.",
+      "--dry-run": "Generate recommendations and post a Discord preview labeled '\ud83d\udc40 Preview \u2014 not booking'. Does not book anything.",
       "--llm": "Use the Claude API (claude-sonnet-4-6) for Pass 1 + Pass 2 recommendation selection instead of rule-based logic. Requires ANTHROPIC_API_KEY in .env. Falls back to rule-based automatically on failure."
     },
     "examples": {
@@ -456,7 +535,6 @@
       "fix_by_name": "python run.py fix 4/22/2026 --name 'Advanced Open Play' --court 1"
     }
   },
-
   "project_layout": {
     "description": "Directory structure as of 2026-04-11. Reorganized from root-dumping to structured subdirectories.",
     "directories": {
@@ -481,7 +559,6 @@
       "policy.json": "Single source of truth for all business rules and scheduling policy"
     }
   },
-
   "browser_automation": {
     "playwright_setup": {
       "browser": "Persistent Chrome profile via launch_persistent_context for session persistence across runs.",
@@ -490,20 +567,22 @@
       "note": "Using a persistent profile avoids re-authenticating to Court Reserve on every run."
     }
   },
-
   "fallback_behavior": {
     "when_utilization_unreachable": "Stop at maximal feasible utilization under hard constraints. Report remaining gap explicitly in court-hours and percent points.",
-    "report_fields_on_shortfall": ["achieved_court_hours", "target_court_hours", "gap_court_hours", "gap_pct_points"],
-    "relaxation_order": "TBD — requires explicit business approval before implementation. Suggested: relax constraint 5 first (utilization), then 4 (level coverage), never relax 1–3."
+    "report_fields_on_shortfall": [
+      "achieved_court_hours",
+      "target_court_hours",
+      "gap_court_hours",
+      "gap_pct_points"
+    ],
+    "relaxation_order": "TBD \u2014 requires explicit business approval before implementation. Suggested: relax constraint 5 first (utilization), then 4 (level coverage), never relax 1\u20133."
   },
-
   "traceability": {
     "log_source_workbook_timestamp": true,
     "log_report_generation_timestamp": true,
     "source_data_pattern": "history/history_latest.json",
     "note": "History is fetched weekly via fetch_history.py and stored locally. Scheduler run logs go to logs/."
   },
-
   "governance": {
     "eventid_whitelist_change_policy": "Approved event IDs may only be added or removed with explicit business approval. Update approved_events in this file; do not hardcode IDs in scheduler logic.",
     "operating_window_change_policy": "Windows are configurable by day-of-week in this file.",

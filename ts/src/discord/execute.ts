@@ -81,10 +81,46 @@ async function bookOne(cr: CourtReserveClient, rec: RecommendationDict): Promise
         res_id: String(result.occurrence_id),
         court_ids: allIds.map(String),
         max_people: rec.max_participants,
+        event_id: String(rec.event_id),
       }),
     )
   }
   return result
+}
+
+export interface AutoBookResult {
+  recommendation: RecommendationDict
+  success: boolean
+  occurrence_id?: number
+  error?: string
+}
+
+/**
+ * Book a list of recommendations directly — no Discord, no approval gate.
+ * Used by the daily scheduler's auto-book mode. Logs each result; returns the
+ * per-event outcomes (for the booking log + failure alert).
+ */
+export async function bookAll(
+  cr: CourtReserveClient,
+  recs: RecommendationDict[],
+  log: (m: string) => void = noop,
+): Promise<AutoBookResult[]> {
+  const results: AutoBookResult[] = []
+  for (const rec of recs) {
+    const r = await bookOne(cr, rec)
+    const where = `${rec.date} ${rec.start_time} Court #${rec.court_num} ${rec.level}`
+    if (r.success) log(`  ✅ booked ${where}`)
+    else log(`  ❌ FAILED ${where} — ${r.error ?? 'unknown error'}`)
+    results.push({
+      recommendation: rec,
+      success: r.success,
+      occurrence_id: r.occurrence_id,
+      error: r.error,
+    })
+  }
+  const booked = results.filter((r) => r.success).length
+  log(`Auto-book done: ${booked} booked, ${results.length - booked} failed`)
+  return results
 }
 
 // ── Daily approval booking (with retry loop) ───────────────────────────────────
@@ -343,6 +379,7 @@ export async function executeExpand(
       res_id: String(resId),
       court_ids: p.all_court_ids.map(String),
       max_people: p.new_max,
+      event_id: String(p.event_id),
     }),
   )
 

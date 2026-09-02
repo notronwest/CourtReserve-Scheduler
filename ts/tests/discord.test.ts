@@ -308,7 +308,7 @@ describe('processMessage routing', () => {
     })
     await processMessage(ctx, '!schedule friday')
     expect(spawnedFor).toBe('7/10/2026')
-    expect(posted.messages[0]).toContain('Generating recommendations')
+    expect(posted.messages[0]).toContain('Adding events')
   })
 
   it('!schedule with a bad date explains the format', async () => {
@@ -437,6 +437,8 @@ describe('executeBookings', () => {
     )
     expect(setCourtsCalls).toHaveLength(1)
     expect((setCourtsCalls[0] as { court_ids: string[] }).court_ids).toEqual(['52351', '52352'])
+    // event_id must be forwarded — the service needs it to open the right grid.
+    expect((setCourtsCalls[0] as { event_id: string }).event_id).toBe('1931656')
   })
 })
 

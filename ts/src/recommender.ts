@@ -437,12 +437,16 @@ function buildContext(
     se: NaiveDateTime,
     extraCourtNums: number[] = [],
     maxParticipants = 0,
+    // Metadata for a non-approved event id (a distinct fixed event booked by its
+    // own CR EventId). Approved ids look up their name/level from APPROVED_EVENTS.
+    override?: { name: string; level: string },
   ): void => {
-    const ev = APPROVED_EVENTS.get(eid)!
+    const meta = override ?? APPROVED_EVENTS.get(eid)
+    if (!meta) return
     recommendations.push({
       event_id: eid,
-      event_name: ev.name,
-      level: ev.level,
+      event_name: meta.name,
+      level: meta.level,
       court_num: cn,
       court_id: COURTS[cn].id,
       court_label: COURTS[cn].label,
@@ -455,8 +459,10 @@ function buildContext(
     used.push({ cn, ss, se })
     for (const ecn of extraCourtNums) used.push({ cn: ecn, ss, se })
     eventCounts.set(eid, (eventCounts.get(eid) ?? 0) + 1)
-    eventSessions.get(eid)!.push([ss, se])
-    levelsCovered.add(ev.level)
+    const sess = eventSessions.get(eid)
+    if (sess) sess.push([ss, se])
+    else eventSessions.set(eid, [[ss, se]])
+    levelsCovered.add(meta.level)
   }
 
   // ── Pass 0: fixed recurring events ──────────────────────────────────────────
@@ -467,7 +473,10 @@ function buildContext(
     const feEnd = NaiveDateTime.fromYMDHM(dateStr, fe.end_time)
 
     const feLevel = fe.level ?? ''
-    const eid = LEVEL_TO_EVENT_ID[feLevel]
+    // A fixed event with its own CR EventId books that distinct event ("Level
+    // Play"); otherwise it maps to the level's generic Open Play event.
+    const distinctId = fe.event_id
+    const eid = distinctId ?? LEVEL_TO_EVENT_ID[feLevel]
     if (eid === undefined) continue
 
     const nCourtsNeeded = fe.courts ?? 1
@@ -508,7 +517,8 @@ function buildContext(
       const primary = courtsAssigned[0]
       const extras = courtsAssigned.slice(1)
       const maxP = fe.max_participants ?? 0
-      add(eid, primary, feStart, feEnd, extras, maxP)
+      const override = distinctId !== undefined ? { name: fe.name, level: feLevel } : undefined
+      add(eid, primary, feStart, feEnd, extras, maxP, override)
     }
   }
 

@@ -114,4 +114,59 @@ describe('runScheduler', () => {
     expect(posted.length).toBeGreaterThanOrEqual(1)
     expect(existsSync(resolve(tmp, 'pending_approval.json'))).toBe(false)
   })
+
+  it('auto-book books directly, posts a green confirmation, no pending file', async () => {
+    const posted: { embeds?: { title?: string }[] }[] = []
+    const booked: unknown[] = []
+    const d = {
+      ...deps(posted),
+      cr: {
+        schedule: async () => scheduleItems,
+        book: async (r: unknown) => {
+          booked.push(r)
+          return { success: true, occurrence_id: 111 }
+        },
+        setCourts: async () => ({ success: true }),
+      } as never,
+    }
+    const res = await runScheduler(DATE, d, { llm: false, autoBook: true })
+    expect(res.booked).toBe(res.recommendations.length)
+    expect(booked.length).toBe(res.recommendations.length)
+    expect(existsSync(resolve(tmp, 'pending_approval.json'))).toBe(false)
+    // Confirmation posted (exactly one embed), titled with the booked count.
+    expect(posted.length).toBe(1)
+    expect(posted[0].embeds?.[0].title).toContain(`Booked ${res.booked}/${res.recommendations.length}`)
+    // Durable booking log written too.
+    const logged = JSON.parse(readFileSync(resolve(tmp, 'booking_log_7-13-2026.json'), 'utf8'))
+    expect(logged.failed).toBe(0)
+    expect(logged.results).toHaveLength(res.recommendations.length)
+  })
+
+  it('auto-book confirmation shows failures and the log records them', async () => {
+    const posted: { embeds?: { title?: string }[] }[] = []
+    let n = 0
+    const d = {
+      ...deps(posted),
+      cr: {
+        schedule: async () => scheduleItems,
+        book: async () => {
+          n += 1
+          return n === 1 ? { success: false, error: 'court busy' } : { success: true, occurrence_id: 1 }
+        },
+        setCourts: async () => ({ success: true }),
+      } as never,
+    }
+    const res = await runScheduler(DATE, d, { llm: false, autoBook: true })
+    expect(res.failed).toBe(1)
+    expect(res.booked).toBe(res.recommendations.length - 1)
+    expect(posted.length).toBe(1)
+    expect(posted[0].embeds?.[0].title).toContain('failed')
+    const logged = JSON.parse(readFileSync(resolve(tmp, 'booking_log_7-13-2026.json'), 'utf8'))
+    expect(logged.failed).toBe(1)
+    expect(
+      logged.results.some(
+        (r: { success: boolean; error: string | null }) => r.success === false && r.error === 'court busy',
+      ),
+    ).toBe(true)
+  })
 })
