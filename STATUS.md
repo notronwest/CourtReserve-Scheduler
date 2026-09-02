@@ -7,10 +7,17 @@
 ---
 ## 2026-09-01 — Permanent Intermediate slots + women's events made addressable
 
-**State:** merged main (which landed the `event_id` override, `DEPLOYMENT.md`, and the
-TS launchd/cutover work) into `policy/intermediate-permanent-slots`, then re-applied
-this session's changes on top of main's restructured `policy.json`. PR
-[#34](https://github.com/notronwest/CourtReserve-Scheduler/pull/34).
+**State:** **MERGED to `main`** as `5341aa2` via PR
+[#34](https://github.com/notronwest/CourtReserve-Scheduler/pull/34); branch deleted.
+Main had moved 8 commits meanwhile — landing the `event_id` override
+([#30](https://github.com/notronwest/CourtReserve-Scheduler/pull/30)), `DEPLOYMENT.md`
+([#33](https://github.com/notronwest/CourtReserve-Scheduler/pull/33)), and the TS
+launchd/cutover work — and conflicted on all three files this session touched.
+Resolved by taking main's restructured `policy.json` / `CLAUDE.md` / `STATUS.md` and
+re-applying this session's changes on top.
+
+**⚠️ NOT DEPLOYED.** Per `DEPLOYMENT.md`, pushing to `main` deploys nothing — a human
+runs `./setup.sh` on the club Mac. None of this is live yet.
 
 ### ✅ Done
 - **New permanent Intermediate fixed events:** Monday **16:00–18:00**, Tuesday
