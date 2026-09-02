@@ -39,6 +39,13 @@
       "level": "Advanced",
       "default_duration_hours": 2
     },
+    "1717124": {
+      "name": "Women's Advanced Intermediate Open Play",
+      "level": "Advanced Intermediate",
+      "default_duration_hours": 2,
+      "womens": true,
+      "note": "Added 2026-09-01 by club management so !book/!move can address the Wednesday women's series. Event id supplied by Ron from the Court Reserve Events/Edit URL — NOT independently verified. See approved_events_womens_flag_note for the level collision guard."
+    },
     "1240908": {
       "name": "Women's Intermediate Open Play",
       "level": "Intermediate",

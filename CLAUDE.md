@@ -98,6 +98,12 @@ make migrate           # Create migration bundle for a new machine
 - Kendo MultiSelect hides the original `<select>` — wait for `.action-modal.in`, not `#Courts`
 - Success detection: `wait_for_url(lambda url: "AddEventOccurrence" not in url, timeout=12000)` — not a fixed sleep
 - Occurrence IDs captured from `data-remote` attribute or `revertReservationToSeries` onclick pattern
+- **Archived events are invisible by default.** Court Reserve treats an event with no
+  future instances as *archived*: it drops out of the events list entirely. To see one you
+  must widen the list's date range back to the beginning of time — **1/15/2025**. This is
+  how you recover the `event_id` of a dormant series (e.g. a seasonal or paused Open Play).
+  A "missing" event is usually archived, not deleted — check before assuming it's gone or
+  creating a duplicate.
 
 ## Environment Variables
 
