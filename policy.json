@@ -38,8 +38,16 @@
       "name": "Co-ed Advanced Open Play",
       "level": "Advanced",
       "default_duration_hours": 2
+    },
+    "1240908": {
+      "name": "Women's Intermediate Open Play",
+      "level": "Intermediate",
+      "default_duration_hours": 2,
+      "womens": true,
+      "note": "Added 2026-09-01 by club management so !book/!move can address the women's series (llm_parser builds its event vocabulary from approved_events). Event id supplied by Ron from the Court Reserve Events/Edit URL — NOT independently verified against Court Reserve. UNVERIFIED: confirm before the first booking is confirmed."
     }
   },
+  "approved_events_womens_flag_note": "Entries flagged womens:true share a 'level' with a co-ed event. Any map built as {level -> event_id} is LAST-WINS and will silently resolve that level to the women's id. fix_imbalance.py (_BY_LEVEL) and ts/src/jobs/fixImbalance.ts (buildCtx) therefore skip womens entries when deriving level -> id. recommender.py is unaffected: it hardcodes its own APPROVED_EVENTS at line 24 and never reads this block (which itself contradicts governance.eventid_whitelist_change_policy).",
 
   "fixed_events": {
     "note": "Recurring weekly events that are always on the schedule. Used by the recommender for saturation calculations and to avoid recommending conflicting events. Courts and max_participants are informational.",
