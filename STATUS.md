@@ -5,6 +5,7 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+
 ## 2026-09-01 (later) — Backfill decided: do NOT re-run `--book` on booked days
 
 **State:** Analysis only, no code or policy changes since `b0ba403`. Working tree
