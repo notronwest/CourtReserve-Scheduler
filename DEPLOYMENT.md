@@ -1,13 +1,21 @@
 # Deployment — court-reserve-scheduler
 
-No cloud host and no web frontend. This is a Python + Playwright system installed
-on **one always-on Mac** as four launchd agents: a daily recommender, a daily
-waitlist checker, a weekly history fetch, and a persistent Discord listener.
-"Deploying" is `./setup.sh` on that machine. Pushing to `main` deploys nothing.
+No cloud host and no web frontend. This is a **node/tsx** system installed on
+**one always-on Mac** as five launchd agents: a daily auto-booker, a daily
+waitlist checker, a weekly history fetch, a weekly past-event check-in, and a
+persistent Discord listener. "Deploying" is `./setup.sh` on that machine.
+Pushing to `main` deploys nothing.
 
-It has to be a real Mac: the Court Reserve client drives **non-headless Chrome**
-against a saved browser profile, on the club's residential IP. Headless breaks
-Cloudflare's bot check, and a datacenter IP gets challenged.
+**The jobs run TypeScript, not Python.** `setup.sh` installs the plists from
+[`ts/ops/`](./ts/ops/); the Python tree at the repo root is the rollback path
+([`ts/ops/rollback.sh`](./ts/ops/rollback.sh)), not the live one. Court Reserve
+access goes through the [`courtreserve-api`](../courtreserve-api) HTTP service —
+**none of these five jobs drives a browser.**
+
+It still has to be a real Mac, one step removed: `courtreserve-api` drives
+**non-headless Chrome** against a saved browser profile, on the club's
+residential IP. Headless breaks Cloudflare's bot check, and a datacenter IP gets
+challenged.
 
 ```yaml
 # wmpc-deployment: v1
@@ -20,17 +28,17 @@ targets:
   - name: scheduler
     kind: mac-mini-launchd
     trigger: launchd com.whitemountain.scheduler — daily at 8:00 AM (installed/reloaded by ./setup.sh)
-    source: scripts/run_scheduler.sh → recommender.py
+    source: ts/ops/run-scheduler.sh → ts/src/cli.ts schedule <14d-out>
     env: PROD
-    url: n/a — posts recommendations to Discord for approval
+    url: n/a — books directly (auto-book), then posts a confirmation embed to Discord
     host: the machine ./setup.sh was run on (single install; not fleet-replicated)
-    config_scope: .env in the repo root on that machine (CR credentials, Discord webhook, Anthropic API key) + policy.json + courts.json
+    config_scope: ts/.env on that machine (CRAPI_URL/KEY, Discord webhook + bot token, Anthropic API key) + policy.json + courts.json
     verify: ./check.sh, and the logs under ~/Library/Logs/court_reserve/
     rollback: git checkout an earlier commit and re-run ./setup.sh
   - name: check-waitlists
     kind: mac-mini-launchd
     trigger: launchd com.whitemountain.check-waitlists — 9:00, 11:00, 13:00, 15:00, 17:00 daily
-    source: check_waitlists.py
+    source: ts/ops/run-check-waitlists.sh → ts/src/jobs/checkWaitlists.ts
     env: PROD
     url: n/a
     host: same machine
@@ -40,7 +48,7 @@ targets:
   - name: fetch-history
     kind: mac-mini-launchd
     trigger: launchd com.whitemountain.fetch-history — weekly, Monday 7:00 AM
-    source: scripts/run_fetch_history.sh → fetch_history.py
+    source: ts/ops/run-fetch-history.sh → ts/src/jobs/fetchHistory.ts
     env: PROD
     url: n/a — writes into history/
     host: same machine
@@ -50,16 +58,27 @@ targets:
   - name: listener
     kind: mac-mini-launchd
     trigger: launchd com.whitemountain.listener — persistent (RunAtLoad + KeepAlive)
-    source: scripts/run_listener.sh → discord_listener.py
+    source: ts/ops/run-listener.sh → ts/src/discord/listener.ts
     env: PROD
-    url: n/a — listens for approvals in Discord and books confirmed events
+    url: n/a — handles !book / !move / !schedule and waitlist expansions in Discord
     host: same machine
-    config_scope: same .env (Discord bot token / webhook)
+    config_scope: same ts/.env (Discord bot token / webhook)
     verify: launchctl list | grep com.whitemountain.listener; react in Discord and confirm it acts
+    rollback: launchctl unload the plist
+  - name: checkin
+    kind: mac-mini-launchd
+    trigger: launchd com.whitemountain.checkin — weekly, Monday 6:00 AM
+    source: ts/ops/run-checkin.sh → ts/src/jobs/checkinPast.ts --execute --days 8
+    env: PROD
+    url: n/a — checks in players on past events so attendance history is accurate
+    host: same machine
+    config_scope: same ts/.env
+    verify: the job's log under ~/Library/Logs/court_reserve/
     rollback: launchctl unload the plist
   - name: cr-browser-session
     kind: none
-    trigger: MANUAL, interactive — step 7 of ./setup.sh opens a browser to log in
+    trigger: MANUAL, interactive — step 8 of ./setup.sh opens a browser to log in
+    note: used by the Python rollback path only; the five TS jobs reach CR via courtreserve-api
     source: cache/chrome_profile/
     env: PROD
     url: n/a
@@ -76,6 +95,7 @@ targets:
 | `scheduler` | launchd | daily 8:00 AM |
 | `check-waitlists` | launchd | 9:00 · 11:00 · 13:00 · 15:00 · 17:00 daily |
 | `fetch-history` | launchd | Mondays 7:00 AM |
+| `checkin` | launchd | Mondays 6:00 AM |
 | `listener` | launchd | persistent (`KeepAlive`) |
 | `cr-browser-session` | hand-run, once | — |
 
@@ -88,18 +108,25 @@ cd ~/data/web/wmpc/projects/court-reserve-scheduler
 git pull && ./setup.sh
 ```
 
-It builds the venv, installs dependencies and Playwright's Chromium, creates
-`.env`, **installs and reloads all four launchd agents**, and walks the
-first-time Court Reserve login. `./setup.sh --restore <bundle.tar.gz>` restores a
-prior install's `.env`, history, browser profile, and booking logs.
+It builds the venv, installs dependencies and Playwright's Chromium, installs
+the `ts/` node dependencies, creates `.env`, **installs and reloads all five
+launchd agents from [`ts/ops/`](./ts/ops/)**, and walks the first-time Court
+Reserve login. `./setup.sh --restore <bundle.tar.gz>` restores a prior install's
+`.env`, history, browser profile, and booking logs.
 
-**The plists are templates, not literals.** `ops/*.plist` hardcode
-`/Users/notronwest/data/court_reserve_scheduling` — an older path — and
+**`setup.sh` installs the TS plists — never the Python ones.** It used to read
+`ops/*.plist`, which meant a routine `git pull && ./setup.sh` silently undid a
+completed [`ts/ops/cutover.sh`](./ts/ops/cutover.sh): the labels are identical,
+so nothing looked wrong, and the next morning's 8 AM scheduler quietly dropped
+from auto-book back to post-and-approve. To go back to Python deliberately, run
+[`ts/ops/rollback.sh`](./ts/ops/rollback.sh) — never by re-running setup.
+
+**The plists are templates, not literals.** `ts/ops/*.plist` hardcode
+`/Users/notronwest/data/web/wmpc/projects/court-reserve-scheduler`, and
 `install_plist()` rewrites that prefix to the actual install directory (and
 `$HOME/Library`) with `sed` as it copies each one into `~/Library/LaunchAgents`.
-So the path in the committed plist is expected to look wrong; editing it to the
-"correct" path would break nothing but would also change nothing. What matters is
-that the substitution happens at install time — which is why a **moved repo needs
+So a checkout under a different directory name still works — but only because the
+substitution happens at install time, which is why a **moved repo needs
 `./setup.sh` re-run**, not just a `git pull`.
 
 Uninstall: `./uninstall.sh` — unloads the agents, removes the plists and the logs
@@ -119,11 +146,13 @@ python cr_client.py --login
 
 ## Environments & variable scopes
 
-One environment, one machine. Everything is the repo-root `.env` on that machine,
-plus two committed policy files:
+One environment, one machine. Everything is **`ts/.env`** on that machine, plus
+two committed policy files:
 
-- **`.env`** — Court Reserve credentials, Discord webhook / bot token, Anthropic
-  API key. Gitignored; see [`.env.example`](./.env.example).
+- **`ts/.env`** — `CRAPI_URL`/`CRAPI_KEY` for `courtreserve-api`, Discord webhook
+  / bot token, Anthropic API key. Gitignored; see
+  [`ts/.env.template`](./ts/.env.template). The repo-root `.env` still feeds the
+  Python rollback path — keep both populated on the host.
 - **`policy.json`** — booking policy the recommender applies.
 - **`courts.json`** — court inventory.
 
@@ -144,17 +173,27 @@ running the jobs. Running it on a second machine would double-book.
 Plus:
 
 ```bash
-python test_connections.py
+curl -s localhost:8787/health          # courtreserve-api must be up
 launchctl list | grep com.whitemountain
 ```
+
+The scheduler leaves two durable traces of each auto-book run: a confirmation
+embed in Discord, and `logs/booking_log_<date>.json` listing every reservation
+with its CR occurrence id.
 
 Logs live under `~/Library/Logs/court_reserve/`.
 
 ## Roll back
 
-`git checkout <earlier-commit>` and re-run `./setup.sh` — it reloads all four
+`git checkout <earlier-commit>` and re-run `./setup.sh` — it reloads all five
 agents. To stop a single job, `launchctl unload ~/Library/LaunchAgents/<label>.plist`.
 To remove everything, `./uninstall.sh`.
+
+To fall back from TypeScript to the Python jobs, run
+[`ts/ops/rollback.sh`](./ts/ops/rollback.sh), which restores the plists backed up
+under `~/Library/LaunchAgents/.python-plist-backup/`. Note that a later
+`./setup.sh` re-installs the TS plists, so a rollback holds only until the next
+setup run.
 
 ## Does NOT deploy from here
 
