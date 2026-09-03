@@ -43,6 +43,41 @@ describe('parseBookCommand', () => {
     expect(params.event_id).toBe(1717147)
   })
 
+  it('carries a null court through without inventing one', async () => {
+    // The listener fills the court in from the live schedule — the parser must
+    // not guess, which is how !book landed on an already-booked Court #1.
+    const reply = JSON.stringify({
+      event_id: 1672774,
+      level: 'Advanced Intermediate',
+      date: '9/3/2026',
+      start_time: '6:00 PM',
+      end_time: '8:00 PM',
+      court_num: null,
+      court_id: null,
+      error: null,
+    })
+    const params = await parseBookCommand('advanced intermediate tomorrow @ 6pm', policy, {
+      client: textStub(reply) as never,
+    })
+    expect(params.court_num).toBeNull()
+    expect(params.error).toBeNull()
+  })
+
+  it('tells the model not to guess a court', async () => {
+    let seen = ''
+    const spy = {
+      messages: {
+        create: async (req: { messages: { content: string }[] }) => {
+          seen = req.messages[0].content
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"error":"x"}' }] }
+        },
+      },
+    }
+    await parseBookCommand('beginner tomorrow', policy, { client: spy as never })
+    expect(seen).toMatch(/set BOTH to null/)
+    expect(seen).toMatch(/Never guess or default a court/)
+  })
+
   it('flags an event_id not in the approved list', async () => {
     const reply = JSON.stringify({ event_id: 12345, court_id: 52349, error: null })
     const params = await parseBookCommand('mystery event', policy, { client: textStub(reply) as never })

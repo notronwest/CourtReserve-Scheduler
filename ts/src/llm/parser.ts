@@ -21,8 +21,9 @@ export interface BookParams {
   date?: string
   start_time?: string
   end_time?: string
-  court_num?: number
-  court_id?: number
+  /** null when the request named no court — the booker picks a free one. */
+  court_num?: number | null
+  court_id?: number | null
   extra_court_nums?: number[]
   extra_court_ids?: number[]
   max_participants?: number
@@ -117,6 +118,9 @@ ${courtsText(policy)}
 Rules:
 - All open play sessions are exactly 2 hours long
 - court_id and court_num must match the courts list above
+- ONLY set court_num/court_id if the request explicitly names a court.
+  If it does not name one, set BOTH to null. Never guess or default a court —
+  the booker picks a free one from the live schedule.
 - event_id must be one of the approved event IDs above
 - For multi-court bookings, primary court goes in court_num/court_id,
   additional courts go in extra_court_nums/extra_court_ids
@@ -134,8 +138,8 @@ Return JSON:
   "date": "<M/D/YYYY>",
   "start_time": "<H:MM AM/PM>",
   "end_time": "<H:MM AM/PM>",
-  "court_num": <int>,
-  "court_id": <int>,
+  "court_num": <int, or null if no court was named>,
+  "court_id": <int, or null if no court was named>,
   "extra_court_nums": [],
   "extra_court_ids": [],
   "max_participants": <int>,

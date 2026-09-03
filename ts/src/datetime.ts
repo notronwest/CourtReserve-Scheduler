@@ -105,6 +105,15 @@ export class NaiveDateTime {
   }
 }
 
+/** "H:MM AM/PM" → "HH:MM" (24h). Returns the input unchanged if it doesn't match. */
+export function to24h(t: string): string {
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(t.trim())
+  if (!m) return t
+  let h = Number(m[1]) % 12
+  if (m[3].toUpperCase() === 'PM') h += 12
+  return `${String(h).padStart(2, '0')}:${m[2]}`
+}
+
 /** Half-open overlap test — matches Python `_overlaps`. */
 export function overlaps(
   s1: NaiveDateTime, e1: NaiveDateTime, s2: NaiveDateTime, e2: NaiveDateTime,

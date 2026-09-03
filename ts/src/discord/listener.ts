@@ -12,8 +12,17 @@ import { spawn } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CourtReserveClient } from '../cr/client'
+import { NaiveDateTime, to24h } from '../datetime'
+import {
+  occupiedSlots,
+  conflictsFor,
+  freeCourts,
+  describeConflict,
+  type OccupiedSlot,
+} from '../availability'
+import { COURTS } from '../recommender'
 import { loadPolicy, type Policy } from '../policy'
-import { parseBookCommand, parseMoveCommand } from '../llm/parser'
+import { parseBookCommand, parseMoveCommand, type BookParams } from '../llm/parser'
 import {
   loadState,
   saveState,
@@ -268,6 +277,118 @@ async function handleMove(ctx: ListenerCtx, text: string): Promise<void> {
   ctx.log(`Move preview posted (msg_id=${msgId})`)
 }
 
+// ── !book court guard ─────────────────────────────────────────────────────────
+//
+// `parseBookCommand` only ever sees policy.json — it has no idea what's already
+// on the calendar. Before 2026-09-03 that meant `!book <level> <time>` with no
+// court named got whatever court the LLM picked (always #1) and was booked on
+// top of whatever was already there. Everything below is the same same-court
+// overlap rule the daily recommender enforces, applied to the ad-hoc path.
+
+const KNOWN_COURTS = new Set(Object.keys(COURTS).map(Number))
+
+/** The `[start, end)` a set of book params asks for. Null if the times are unparseable. */
+export function bookWindow(
+  params: Pick<BookParams, 'date' | 'start_time' | 'end_time'>,
+): { start: NaiveDateTime; end: NaiveDateTime; ymd: string } | null {
+  try {
+    const ymd = NaiveDateTime.parseDate(params.date as string).formatYmd()
+    return {
+      start: NaiveDateTime.fromYMDHM(ymd, to24h(params.start_time as string)),
+      end: NaiveDateTime.fromYMDHM(ymd, to24h(params.end_time as string)),
+      ymd,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Courts to try when the request named none — the recommender's preference order. */
+function courtOrder(ctx: ListenerCtx): number[] {
+  const preferred = ctx.policy.recommendation_rules?.preferred_court_when_free ?? 4
+  const rest = [...KNOWN_COURTS].sort((a, b) => a - b).filter((c) => c !== preferred)
+  return KNOWN_COURTS.has(preferred) ? [preferred, ...rest] : rest
+}
+
+export type CourtCheck =
+  | { ok: true; params: BookParams; autoPicked: boolean }
+  | { ok: false; message: string }
+
+/**
+ * Fill in a court if none was named, and reject any request that would land on
+ * top of an existing booking. Mutates nothing — returns updated params.
+ */
+export async function resolveCourt(ctx: ListenerCtx, params: BookParams): Promise<CourtCheck> {
+  const win = bookWindow(params)
+  if (!win) {
+    return { ok: false, message: `❌ Couldn't read the times \`${params.start_time} – ${params.end_time}\`.` }
+  }
+
+  let occupied: OccupiedSlot[]
+  try {
+    const items = await ctx.cr.schedule(params.date as string, params.date as string)
+    occupied = occupiedSlots(items, win.ymd, KNOWN_COURTS)
+  } catch (e) {
+    // Fail closed: booking blind is how the double-booking happened.
+    return {
+      ok: false,
+      message:
+        `❌ Couldn't check ${dayLabel(params.date as string)} for conflicts: ${errMsg(e)}\n` +
+        'Not booking — the court might already be taken. Try again in a moment.',
+    }
+  }
+
+  const free = freeCourts(occupied, courtOrder(ctx), win.start, win.end)
+
+  // No court named — pick a free one.
+  if (params.court_num == null) {
+    if (free.length === 0) {
+      const busy = conflictsFor(occupied, [...KNOWN_COURTS], win.start, win.end)
+      return {
+        ok: false,
+        message:
+          `❌ Every court is booked ${dayLabel(params.date as string)} ` +
+          `${params.start_time} – ${params.end_time}:\n` +
+          busy.map((o) => `• ${describeConflict(o)}`).join('\n'),
+      }
+    }
+    const cn = free[0]
+    ctx.log(`!book named no court — picked free Court #${cn}`)
+    return {
+      ok: true,
+      autoPicked: true,
+      params: { ...params, court_num: cn, court_id: COURTS[cn].id },
+    }
+  }
+
+  // Court named (possibly with extras) — every one of them has to be free.
+  const wanted = [params.court_num, ...(params.extra_court_nums ?? [])]
+  const unknown = wanted.filter((cn) => !KNOWN_COURTS.has(cn))
+  if (unknown.length > 0) {
+    return { ok: false, message: `❌ Not a pickleball court: ${unknown.map((c) => `#${c}`).join(', ')}` }
+  }
+
+  const conflicts = conflictsFor(occupied, wanted, win.start, win.end)
+  if (conflicts.length > 0) {
+    const alt = free.filter((cn) => !wanted.includes(cn))
+    const suggestion =
+      alt.length > 0
+        ? `\n\nFree at that time: ${alt.map((c) => `Court #${c}`).join(', ')}. ` +
+          `Re-run with one, e.g. \`!book ${params.level ?? ''} ${params.date} at ${params.start_time} Court ${alt[0]}\`.`
+        : '\n\nNo other court is free at that time either.'
+    return {
+      ok: false,
+      message:
+        `❌ Already booked ${dayLabel(params.date as string)} ` +
+        `${params.start_time} – ${params.end_time}:\n` +
+        conflicts.map((o) => `• ${describeConflict(o)}`).join('\n') +
+        suggestion,
+    }
+  }
+
+  return { ok: true, autoPicked: false, params }
+}
+
 async function handleBook(ctx: ListenerCtx, text: string): Promise<void> {
   ctx.log(`!book command received: ${text}`)
   let params
@@ -285,12 +406,21 @@ async function handleBook(ctx: ListenerCtx, text: string): Promise<void> {
     return
   }
 
+  const check = await resolveCourt(ctx, params)
+  if (!check.ok) {
+    ctx.log(`!book rejected: ${check.message.split('\n')[0]}`)
+    await ctx.rest.postMessage(check.message)
+    return
+  }
+  params = check.params
+
   const emoji = LEVEL_EMOJI[params.level ?? ''] ?? '⚪'
   const allCourts = [params.court_num as number, ...(params.extra_court_nums ?? [])].sort(
     (a, b) => a - b,
   )
   const courtStr =
     allCourts.length > 1 ? 'Courts #' + allCourts.join(' & #') : `Court #${params.court_num}`
+  const pickedNote = check.autoPicked ? '  ·  auto-picked (free)' : ''
   const maxNote = params.max_participants ? `  ·  max ${params.max_participants} players` : ''
 
   const msgId = await ctx.rest.postEmbed({
@@ -302,7 +432,7 @@ async function handleBook(ctx: ListenerCtx, text: string): Promise<void> {
           { name: 'Event', value: `${emoji} ${params.event_name}`, inline: true },
           { name: 'Date', value: dayLabel(params.date as string), inline: true },
           { name: 'Time', value: `${params.start_time} – ${params.end_time}`, inline: true },
-          { name: 'Courts', value: `${courtStr}${maxNote}`, inline: true },
+          { name: 'Courts', value: `${courtStr}${pickedNote}${maxNote}`, inline: true },
         ],
         footer: { text: 'Reply confirm to book  ·  cancel to skip' },
       },
@@ -454,8 +584,18 @@ export async function processMessage(ctx: ListenerCtx, content: string): Promise
       ctx.state.pending_book_msg_id = null
       ctx.state.pending_book_params = null
       save()
+      // Re-check: the preview may be minutes old, and anything could have taken
+      // the court in between (the daily 8 AM run, another !book, a member).
+      const recheck = await resolveCourt(ctx, params)
+      if (!recheck.ok) {
+        ctx.log(`!book confirm rejected on re-check: ${recheck.message.split('\n')[0]}`)
+        await ctx.rest.postMessage(
+          `${recheck.message}\n\n_(That court was free when the preview was posted.)_`,
+        )
+        return
+      }
       try {
-        await executeSingleBooking(execDeps(ctx), params)
+        await executeSingleBooking(execDeps(ctx), recheck.params)
       } catch (e) {
         ctx.log(`Ad-hoc booking error: ${errMsg(e)}`)
         await ctx.rest.postMessage(`❌ Booking error: ${errMsg(e)}`)

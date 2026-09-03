@@ -6,6 +6,7 @@
  * Pass 2 (utilization fill), which is what the parity tests assert against.
  */
 import { NaiveDateTime, overlaps, pyRound } from './datetime'
+import { occupiedSlots, type OccupiedSlot } from './availability'
 import type { Policy } from './policy'
 import { loadPopularity, popularityScore, type PopularityScores } from './history'
 // Type-only import — no runtime cycle (ranker.ts imports values from here).
@@ -128,21 +129,8 @@ export interface Stats {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseCourtNums(courtsStr: string): number[] {
-  const out: number[] = []
-  const re = /Court #(\d+)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(courtsStr || '')) !== null) out.push(Number(m[1]))
-  return out
-}
-
-interface ExistingEvent {
-  court_num: number
-  start: NaiveDateTime
-  end: NaiveDateTime
-  event_id: number | undefined
-  name: string
-}
+/** Same shape the `!book` guard uses — see `availability.ts`. */
+type ExistingEvent = OccupiedSlot
 
 interface Slot {
   cn: number
@@ -225,26 +213,11 @@ function buildContext(
   const winHours = window.hours
 
   // ── Parse existing events for target date ──────────────────────────────────
-  const existing: ExistingEvent[] = []
-  for (const item of scheduleItems) {
-    if (!item.StartDateTime) continue
-    const itemStart = NaiveDateTime.fromISO(item.StartDateTime)
-    if (itemStart.formatYmd() !== dateStr) continue
-    const itemEnd = NaiveDateTime.fromISO(item.EndDateTime as string)
-    const courtNums = parseCourtNums(item.Courts ?? '')
-    const eid = item.EventId
-    for (const cn of courtNums) {
-      if (cn in COURTS) {
-        existing.push({
-          court_num: cn,
-          start: itemStart,
-          end: itemEnd,
-          event_id: eid,
-          name: (item.EventName ?? '').trim(),
-        })
-      }
-    }
-  }
+  const existing: ExistingEvent[] = occupiedSlots(
+    scheduleItems,
+    dateStr,
+    new Set(Object.keys(COURTS).map(Number)),
+  )
 
   // ── Utilization baseline ────────────────────────────────────────────────────
   const nCourts = policy.utilization.baseline_courts

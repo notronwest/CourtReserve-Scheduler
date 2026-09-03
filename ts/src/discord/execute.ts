@@ -7,6 +7,7 @@
  * These functions post their own result embeds to Discord (matching the Python),
  * so the listener loop just routes and awaits.
  */
+import { to24h } from '../datetime'
 import type { CourtReserveClient } from '../cr/client'
 import type { CrActionResult, ScheduleItem } from '../cr/types'
 import type { BookParams, MoveParams } from '../llm/parser'
@@ -266,15 +267,6 @@ export async function executeSingleBooking(deps: ExecDeps, params: BookParams): 
 }
 
 // ── Move (!move confirm) ───────────────────────────────────────────────────────
-
-/** "H:MM AM/PM" → "HH:MM" (24h) for matching against schedule StartDateTime. */
-function to24h(t: string): string {
-  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(t.trim())
-  if (!m) return t
-  let h = Number(m[1]) % 12
-  if (m[3].toUpperCase() === 'PM') h += 12
-  return `${String(h).padStart(2, '0')}:${m[2]}`
-}
 
 export async function executeMove(deps: ExecDeps, params: MoveParams): Promise<void> {
   const { cr, rest } = deps
