@@ -11,8 +11,9 @@
 #   1. Checks prerequisites (macOS, Python 3.9+)
 #   2. Creates a Python virtual environment and installs dependencies
 #   3. Installs Playwright browser (Chromium)
-#   4. Creates .env from .env.example if it doesn't exist
-#   5. Installs and loads the three launchd services
+#   4. Installs the TypeScript runtime deps the launchd jobs run on (ts/)
+#   5. Creates .env from .env.example if it doesn't exist
+#   6. Installs and loads the five launchd services (from ts/ops — see below)
 #   6. Opens Court Reserve in a browser window so you can log in (first time only)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -150,8 +151,30 @@ else
     ok "Playwright Chromium installed"
 fi
 
-# ── 4. Environment file ───────────────────────────────────────────────────────
-step "4. Environment configuration"
+# ── 4. TypeScript runtime ─────────────────────────────────────────────────────
+step "4. TypeScript runtime (node)"
+
+# The launchd jobs run node/tsx out of ts/ — without these deps every agent
+# fails at load with a bare "cannot find module" in the launchd error log.
+if ! command -v npm >/dev/null 2>&1; then
+    err "npm not found — install Node (brew install node), then re-run ./setup.sh"
+fi
+
+if [[ -d "$INSTALL_DIR/ts/node_modules" ]]; then
+    ok "ts/node_modules already present"
+else
+    info "Installing ts/ dependencies (npm install)..."
+    (cd "$INSTALL_DIR/ts" && npm install --silent)
+    ok "ts/ dependencies installed"
+fi
+
+if [[ ! -f "$INSTALL_DIR/ts/.env" ]]; then
+    warn "ts/.env missing — the TS jobs read it, not the repo-root .env"
+    warn "  copy ts/.env.template to ts/.env and fill it in"
+fi
+
+# ── 5. Environment file ───────────────────────────────────────────────────────
+step "5. Environment configuration"
 
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
@@ -196,21 +219,26 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     warn "The scheduler will not work correctly until these are set."
 fi
 
-# ── 5. Required directories ───────────────────────────────────────────────────
-step "5. Creating runtime directories"
+# ── 6. Required directories ───────────────────────────────────────────────────
+step "6. Creating runtime directories"
 mkdir -p "$INSTALL_DIR/logs/screenshots"
 mkdir -p "$INSTALL_DIR/cache/chrome_profile"
 mkdir -p "$INSTALL_DIR/history"
 mkdir -p "$HOME/Library/Logs/court_reserve"
 ok "Directories ready"
 
-# ── 6. launchd agents ────────────────────────────────────────────────────────
-step "6. Installing launchd agents"
+# ── 7. launchd agents ────────────────────────────────────────────────────────
+step "7. Installing launchd agents"
 mkdir -p "$PLIST_DIR"
 
+# The live jobs run on node/tsx (ts/ops), not Python (ops/). Installing from
+# ops/ here is what silently reverted a completed ts/ops/cutover.sh — every
+# `git pull && ./setup.sh` put the Python plists back and the 8 AM scheduler
+# dropped from auto-book to post-and-approve. Roll back deliberately with
+# ts/ops/rollback.sh, never as a side effect of setup.
 install_plist() {
     local name="$1"
-    local src="$INSTALL_DIR/ops/${name}.plist"
+    local src="$INSTALL_DIR/ts/ops/${name}.plist"
     local dst="$PLIST_DIR/${name}.plist"
 
     if [[ ! -f "$src" ]]; then
@@ -218,8 +246,10 @@ install_plist() {
         return
     fi
 
-    # Substitute install path and username into plist
+    # Substitute install path and username into plist. Both repo-path spellings
+    # are rewritten so a checkout under any directory name works.
     sed \
+        -e "s|/Users/notronwest/data/web/wmpc/projects/court-reserve-scheduler|${INSTALL_DIR}|g" \
         -e "s|/Users/notronwest/data/court_reserve_scheduling|${INSTALL_DIR}|g" \
         -e "s|/Users/notronwest/Library|${HOME}/Library|g" \
         "$src" > "$dst"
@@ -234,9 +264,10 @@ install_plist "com.whitemountain.scheduler"
 install_plist "com.whitemountain.fetch-history"
 install_plist "com.whitemountain.listener"
 install_plist "com.whitemountain.check-waitlists"
+install_plist "com.whitemountain.checkin"
 
-# ── 7. Court Reserve login (first time) ──────────────────────────────────────
-step "7. Court Reserve browser login"
+# ── 8. Court Reserve login (first time) ──────────────────────────────────────
+step "8. Court Reserve browser login"
 
 if [[ -f "$INSTALL_DIR/cache/chrome_profile/Default/Cookies" ]]; then
     ok "Browser profile already exists — Court Reserve session likely saved"
@@ -265,8 +296,8 @@ PYEOF
     ok "Browser session saved"
 fi
 
-# ── 8. Smoke test ─────────────────────────────────────────────────────────────
-step "8. Smoke test"
+# ── 9. Smoke test ─────────────────────────────────────────────────────────────
+step "9. Smoke test"
 
 info "Checking listener is running..."
 if launchctl list | grep -q "com.whitemountain.listener"; then

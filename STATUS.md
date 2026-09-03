@@ -5,6 +5,49 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-03 — `setup.sh` was silently reverting the TS cutover
+
+**State:** PR open against `main`. **Already fixed on the host by hand** —
+`ts/ops/cutover.sh` re-run, TS listener live, 9/16 auto-booked 7/7.
+
+### What broke
+On 2026-09-01 at 23:25 a routine `git pull && ./setup.sh` on `wmpcMacMini1`
+overwrote all four TS launchd plists with the Python ones from `ops/`. The labels
+are identical (`com.whitemountain.*`), so `launchctl list` looked correct and
+nothing surfaced an error. The next morning the 8:00 AM job was
+`scripts/run_scheduler.sh` → `run.py --llm --book`, which **posts recommendations
+for Discord approval instead of auto-booking**. Ron noticed only because the
+approval embed appeared.
+
+Evidence: the installed plists were byte-identical to the July 9 backups in
+`~/Library/LaunchAgents/.python-plist-backup/`; `launchd_scheduler.log` shows
+clean TS auto-book runs on 8/30, 8/31, 9/1 and nothing on 9/2, while
+`scheduler_2026-09-02.log` (Python-only) shows "Pending approval saved". The TS-only
+`checkin` plist survived — `setup.sh` didn't know about it.
+
+### ✅ Done
+- **`install_plist()` now reads `ts/ops/`**, not `ops/`, and installs the fifth
+  agent (`com.whitemountain.checkin`). The `sed` prefix rewrite handles both the
+  old and current repo-path spellings.
+- **New setup step 4** installs the `ts/` node dependencies and warns when
+  `ts/.env` is missing — without those the agents fail at load with a bare
+  "cannot find module" in the launchd error log.
+- **`check.sh` checks all five services** (was three — it never covered
+  `check-waitlists` or `checkin`).
+- **`DEPLOYMENT.md` rewritten to describe the TS deployment** it actually is:
+  node/tsx sources, five agents, `ts/.env` as the config scope, CR reached through
+  `courtreserve-api`, and rollback via `ts/ops/rollback.sh`.
+
+### Trade-off
+`./setup.sh` now *undoes* a deliberate `ts/ops/rollback.sh`, the mirror of the old
+bug. That's the right default — TS is the live path — but a rollback holds only
+until the next setup run. Documented in `DEPLOYMENT.md` under "Roll back".
+
+### 🔜 Next
+- Separate PR: `!book` has no same-court overlap check (see the entry below this
+  one once filed) — `parseBookCommand` never sees the live schedule.
+
+---
 ## 2026-09-01 — Permanent Intermediate slots + women's events made addressable
 
 **State:** **MERGED to `main`** as `5341aa2` via PR

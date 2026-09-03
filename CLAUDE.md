@@ -13,13 +13,23 @@ and books confirmed events on Court Reserve automatically.
 
 ## Architecture
 
-Three launchd agents run persistently on macOS:
+**The live jobs run TypeScript (`ts/`), not the Python at the repo root.** Five
+launchd agents run on the club Mac, installed by `./setup.sh` from
+[`ts/ops/`](ts/ops/). Court Reserve access goes through the `courtreserve-api`
+HTTP service — none of these drives a browser. The Python tree is the rollback
+path (`ts/ops/rollback.sh`), kept working but not what runs.
 
 | Service | When | What |
 |---|---|---|
-| `com.whitemountain.scheduler` | Daily 8:00 AM | LLM recommendations → Discord → saves `pending_approval.json` |
-| `com.whitemountain.listener` | Always-on | Polls Discord every 3s — approves recommendations, handles `!book`/`!move`/`!schedule`/`!help` |
+| `com.whitemountain.scheduler` | Daily 8:00 AM | LLM recommendations → **books directly** (auto-book) → Discord confirmation + `logs/booking_log_<date>.json` |
+| `com.whitemountain.listener` | Always-on | Polls Discord every 3s — handles `!book`/`!move`/`!schedule`/`!help` and waitlist expansions |
 | `com.whitemountain.fetch-history` | Mondays 7:00 AM | Fetches 3 months of attendance history |
+| `com.whitemountain.check-waitlists` | 9/11/13/15/17 daily | Alerts on waitlists that can be expanded to another court |
+| `com.whitemountain.checkin` | Mondays 6:00 AM | Checks in players on past events so history stays accurate |
+
+The daily job **no longer waits for Discord approval**. `pending_approval.json`
+and the `all`/`1,3,5`/`none` replies below are the `--recommend` path, still
+reachable ad hoc but not what the 8 AM agent runs.
 
 ## Key Files
 
