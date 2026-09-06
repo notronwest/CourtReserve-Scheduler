@@ -5,6 +5,45 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-03 — TS cutover DEPLOYED; daily auto-book confirmed working
+
+**State:** **LIVE on `wmpcMacMini1`.** [#35](https://github.com/notronwest/CourtReserve-Scheduler/pull/35)
+merged as `03a600d`, pulled on the host, and `./setup.sh` run there. Supersedes the
+"NOT DEPLOYED" caveat in the entries below.
+
+### ✅ Done
+- **`./setup.sh` now installs the TS plists.** The exact command that caused the
+  regression — `git pull && ./setup.sh` — installed all five agents from `ts/ops/`
+  and left the listener on node/tsx (empty error log). The regression is closed at
+  the source, not just patched by hand.
+- **The daily job is auto-booking unattended again.** The 8:00 AM run on 2026-09-03
+  booked **9/17: 7/7, 0 failed** with no human in the loop — the first fully
+  automatic run since the 09-01 revert.
+- **9/3 verified clean:** 12 court-blocks, **0 same-court overlaps**. Ron removed the
+  bad 6–8 PM Court #1 booking by hand in CR.
+
+### ⚠️ Known, deliberately not fixed here
+- **`setup.sh` exits 1 non-interactively.** Step 8 (Court Reserve browser login)
+  hits a `read -p` prompt; with no TTY and `set -euo pipefail` the script aborts —
+  *after* step 7, so the plists do install, but step 9's smoke test is skipped.
+  The login it wants belongs to the Python rollback path; the five live jobs reach
+  CR through `courtreserve-api`. Step 8 should skip when there's no TTY.
+- **`./check.sh` reports 1 failure / 5 warnings, none affecting the live system.**
+  The failure is "Playwright Chromium missing" (rollback path only). It also reads
+  the stale Python `logs/listener.log` instead of `launchd_listener.log`, and its
+  "Latest booking log" line prints garbled output and `-1`.
+- **`!book` still unguarded in production** until
+  [#36](https://github.com/notronwest/CourtReserve-Scheduler/pull/36) lands. A
+  no-court `!book` at 23:50 on 09-02 landed on a free Court #1 by luck, not by check.
+
+### 🔜 Next
+1. Rebase **#36** — it now conflicts with `main` on `STATUS.md` (both prepend a dated
+   entry; keep both), then merge and re-run `./setup.sh` on the host.
+2. Follow-up PR for the `setup.sh` step-8 TTY guard and the `check.sh` staleness above.
+3. [#37](https://github.com/notronwest/CourtReserve-Scheduler/issues/37) — `!move`
+   can still retime an event on top of another (board: Backlog, Soon, bug).
+
+---
 ## 2026-09-03 — `setup.sh` was silently reverting the TS cutover
 
 **State:** PR open against `main`. **Already fixed on the host by hand** —
