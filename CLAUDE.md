@@ -360,3 +360,34 @@ allowlist *cannot* suppress them — so the fix is how the command is written:
 - **Don't wrap allowlisted tools in big compound shells.** The allowlist
   applies per-command; a leading `cd` + substitution/pipe defeats it. Run the
   tool directly and let the allowlist do its job.
+
+<!-- wmpc-block:deployment:v1 START -->
+## Deployment — read `DEPLOYMENT.md` before touching anything that ships
+
+This repo has a root **[`DEPLOYMENT.md`](./DEPLOYMENT.md)**: the one-screen map
+of what ships from here, what triggers it, where it lands, which variable scope
+it builds against, how to verify, and how to roll back. It opens with a fenced
+YAML block tagged `# wmpc-deployment: v1` — **parse that block** instead of
+guessing; don't infer the deploy shape from `wrangler.*`, a plist, or a CI
+workflow.
+
+Why this exists: the fleet runs **six different deployment shapes** (Pages
+auto-build, `wrangler deploy`, GitHub-Actions Supabase pushes, launchd services
+on the club Mac mini, Cloudflare Tunnels, Caddy static) and they are routinely
+confused for each other — including cases where the same command means very
+different things (`./setup.sh` on the mini is a deploy **and** a production
+schema migration).
+
+**You must:**
+
+- **Read `DEPLOYMENT.md` first** for any question about how this repo ships, and
+  before running any deploy, migration, or `setup.sh`.
+- **Update it in the SAME change** as anything that alters how the repo ships —
+  a new target, a branch→environment change, a new secret, a moved host, a
+  retired target. It must never lag the system.
+- **Never invent a fact into it.** `unknown` / `TODO` is a correct value; a
+  plausible-looking URL, host, or branch mapping gets trusted and acted on.
+
+Canonical convention: `../wmpc-meta/conventions/deployment-doc.md`.
+Pillar: `daemon/docs/change-discipline.md`.
+<!-- wmpc-block:deployment:v1 END -->
