@@ -7,8 +7,12 @@
 ---
 ## 2026-09-06 — Pass 0 min-gap gap FIXED in both engines
 
-**State:** on `fix/pass0-min-gap`. TS typecheck clean, **94/94 tests pass** (was 91).
-Python and the regenerated goldens agree (`regen_goldens.py --check` exits 0).
+**State:** **MERGED to `main`** as `9514021` via
+[#45](https://github.com/notronwest/CourtReserve-Scheduler/pull/45); branch deleted.
+TS typecheck clean, **94/94 tests pass** (was 91). Python and the regenerated goldens
+agree (`regen_goldens.py --check` exits 0).
+
+**⚠️ NOT DEPLOYED** — needs `git pull && ./setup.sh` on `wmpcMacMini1`.
 
 ### ✅ Done
 - **Pass 0 now enforces hard constraint 3b.** It gated only on
