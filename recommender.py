@@ -372,6 +372,7 @@ def recommend(
 
     # ── Build recommendations ─────────────────────────────────────────────────
     recommendations: list[Recommendation] = []
+    skipped_fixed_events: list[dict] = []
     used: list[tuple[int, datetime, datetime]] = []  # (court_num, start, end)
     levels_covered: set[str] = set()
 
@@ -479,7 +480,23 @@ def recommend(
         # Book as ONE occurrence on the primary court, then edit to add extras.
         # This matches Court Reserve's workflow: add date → edit to assign all
         # courts and set max participants.
-        if event_counts[eid] < _max_occ_for(eid):
+        # Hard constraint 3 (max occurrences) and 3b (min gap between occurrences
+        # of the same event) apply to fixed events too. Pass 0 used to check only
+        # the former, so a fixed event whose event id was already on the schedule
+        # (or already placed by Pass 0) at that hour booked a zero-gap duplicate.
+        if event_counts[eid] >= _max_occ_for(eid):
+            skipped_fixed_events.append({
+                "name": fe.get("name"), "day_of_week": fe.get("day_of_week"),
+                "start_time": fe.get("start_time"), "event_id": eid,
+                "reason": "max_occurrences",
+            })
+        elif not event_gap_ok(eid, fe_start, fe_end):
+            skipped_fixed_events.append({
+                "name": fe.get("name"), "day_of_week": fe.get("day_of_week"),
+                "start_time": fe.get("start_time"), "event_id": eid,
+                "reason": "min_gap",
+            })
+        else:
             primary = courts_assigned[0]
             extras  = courts_assigned[1:]
             max_p   = fe.get("max_participants", 0)
@@ -619,6 +636,7 @@ def recommend(
         "popularity_used":         bool(pop_scores),
         "existing_level_counts":   dict(level_counts),
         "rec_source":              llm_source,
+        "skipped_fixed_events":    skipped_fixed_events,
     }
 
     return recommendations, stats

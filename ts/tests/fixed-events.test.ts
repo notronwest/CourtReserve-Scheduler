@@ -36,3 +36,80 @@ describe('distinct fixed events (Level Play)', () => {
     expect(at17?.event_id).toBe(1633147) // generic Co-ed Advanced Open Play
   })
 })
+
+// 7/9/2026 is a Thursday: the fixture has "Co-Ed 3.25-3.5 Level Play" 17:00 (Intermediate).
+const THU = '7/9/2026'
+const INTERMEDIATE = 1931656
+
+describe('Pass 0 respects the min-gap constraint (hard constraint 3b)', () => {
+  it('does not book the same event twice at the same hour, and records why', () => {
+    const policy = basePolicy()
+    // A second Intermediate fixed event at the same hour as "Co-Ed 3.25-3.5 Level
+    // Play" — both resolve to the generic Intermediate id, so this is a duplicate.
+    policy.fixed_events!.events!.push({
+      name: 'Co-ed Intermediate Open Play',
+      day_of_week: 'Thursday',
+      start_time: '17:00',
+      end_time: '19:00',
+      courts: 1,
+      level: 'Intermediate',
+    })
+    const { recommendations, stats } = recommend([], THU, policy, { popularity: new Map() })
+
+    const at17 = recommendations.filter(
+      (r) => r.event_id === INTERMEDIATE && r.start.formatHm() === '17:00',
+    )
+    expect(at17).toHaveLength(1)
+    expect(stats.skipped_fixed_events).toContainEqual(
+      expect.objectContaining({ event_id: INTERMEDIATE, reason: 'min_gap', start_time: '17:00' }),
+    )
+  })
+
+  it('skips a fixed event whose event id is already on the live schedule at that hour', () => {
+    const policy = basePolicy()
+    const live = [
+      {
+        StartDateTime: '2026-07-09T17:00:00',
+        EndDateTime: '2026-07-09T19:00:00',
+        Courts: 'Pickleball-Court #1',
+        EventId: INTERMEDIATE,
+        EventName: 'Co-ed Intermediate Open Play',
+      },
+    ]
+    const { recommendations, stats } = recommend(live, THU, policy, { popularity: new Map() })
+
+    // Pass 0 must not add a second copy on a different free court.
+    expect(
+      recommendations.some((r) => r.event_id === INTERMEDIATE && r.start.formatHm() === '17:00'),
+    ).toBe(false)
+    expect(stats.skipped_fixed_events).toContainEqual(
+      expect.objectContaining({ event_id: INTERMEDIATE, reason: 'min_gap' }),
+    )
+  })
+
+  it('a distinct event_id lets both run at the same hour — they are different events', () => {
+    const policy = basePolicy()
+    // This is the unblock for a genuinely separate Thursday session: give the
+    // branded Level Play entry its own CR id so it no longer collides.
+    const levelPlay = policy.fixed_events!.events!.find(
+      (e) => e.name === 'Co-Ed 3.25-3.5 Level Play',
+    )!
+    levelPlay.event_id = 1990001
+    policy.fixed_events!.events!.push({
+      name: 'Co-ed Intermediate Open Play',
+      day_of_week: 'Thursday',
+      start_time: '17:00',
+      end_time: '19:00',
+      courts: 1,
+      level: 'Intermediate',
+    })
+    const { recommendations, stats } = recommend([], THU, policy, { popularity: new Map() })
+
+    // Thursday 17:00 also legitimately holds Mens Advanced Plus (a different id);
+    // what matters is that the two Intermediate-level entries now BOTH run.
+    const ids17 = recommendations.filter((r) => r.start.formatHm() === '17:00').map((r) => r.event_id)
+    expect(ids17).toContain(INTERMEDIATE)
+    expect(ids17).toContain(1990001)
+    expect(stats.skipped_fixed_events).toEqual([])
+  })
+})

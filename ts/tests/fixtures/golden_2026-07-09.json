@@ -46,6 +46,7 @@
       "Advanced Intermediate": 3,
       "Advanced": 3
     },
-    "rec_source": "rule_based"
+    "rec_source": "rule_based",
+    "skipped_fixed_events": []
   }
 }

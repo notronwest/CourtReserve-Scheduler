@@ -107,6 +107,16 @@ export interface ScheduleItem {
   [k: string]: unknown
 }
 
+/** A fixed event Pass 0 declined to place, and why. */
+export interface SkippedFixedEvent {
+  name: string
+  day_of_week?: string
+  start_time?: string
+  event_id: number
+  /** `min_gap` = hard constraint 3b; `max_occurrences` = hard constraint 3. */
+  reason: 'min_gap' | 'max_occurrences'
+}
+
 export interface Stats {
   target_date: string
   day_of_week: string
@@ -123,6 +133,8 @@ export interface Stats {
   min_recommendations_met: boolean
   n_recommendations: number
   popularity_used: boolean
+  /** Fixed events Pass 0 could not place. Empty in the normal case. */
+  skipped_fixed_events: SkippedFixedEvent[]
   existing_level_counts: Record<string, number>
   rec_source: string
 }
@@ -160,6 +172,8 @@ export interface RecoContext {
   saturationThreshold: number
   popSize: number
   recommendations: Recommendation[]
+  /** Fixed events Pass 0 could not place, with the reason. Surfaced in Stats. */
+  skippedFixedEvents: SkippedFixedEvent[]
   used: Slot[]
   eventCounts: Map<number, number>
   levelCounts: Record<string, number>
@@ -377,6 +391,7 @@ function buildContext(
 
   // ── Build recommendations ───────────────────────────────────────────────────
   const recommendations: Recommendation[] = []
+  const skippedFixedEvents: SkippedFixedEvent[] = []
   const used: Slot[] = []
   const levelsCovered = new Set<string>()
 
@@ -486,7 +501,22 @@ function buildContext(
 
     if (courtsAssigned.length === 0) continue
 
-    if ((eventCounts.get(eid) ?? 0) < maxOccFor(eid)) {
+    // Hard constraint 3 (max occurrences) and 3b (min gap between occurrences of
+    // the same event) apply to fixed events too. Pass 0 used to check only the
+    // former, so two fixed events resolving to the same event id at the same hour
+    // booked it twice with zero gap. Give a fixed event its own `event_id` when it
+    // is genuinely a distinct CR event rather than a second copy of the generic one.
+    if ((eventCounts.get(eid) ?? 0) >= maxOccFor(eid)) {
+      skippedFixedEvents.push({
+        name: fe.name, day_of_week: fe.day_of_week, start_time: fe.start_time,
+        event_id: eid, reason: 'max_occurrences',
+      })
+    } else if (!eventGapOk(eid, feStart, feEnd)) {
+      skippedFixedEvents.push({
+        name: fe.name, day_of_week: fe.day_of_week, start_time: fe.start_time,
+        event_id: eid, reason: 'min_gap',
+      })
+    } else {
       const primary = courtsAssigned[0]
       const extras = courtsAssigned.slice(1)
       const maxP = fe.max_participants ?? 0
@@ -502,7 +532,7 @@ function buildContext(
     policy, td, dateStr, dayName, nCourts, winHours,
     existingCourtHours, targetCourtHours, neededCourtHours,
     minGapHours, saturationThreshold, popSize: popScores.size,
-    recommendations, used, eventCounts, levelCounts, levelsCovered, freeSlots,
+    recommendations, skippedFixedEvents, used, eventCounts, levelCounts, levelsCovered, freeSlots,
     maxOccFor, pop, timePref, recFree, eventGapOk, add,
   }
 }
@@ -579,7 +609,7 @@ function finalize(
   recSource: 'rule_based' | 'llm' | 'fallback',
 ): { recommendations: Recommendation[]; stats: Stats } {
   const {
-    recommendations, policy, td, dayName, existingCourtHours, targetCourtHours,
+    recommendations, skippedFixedEvents, policy, td, dayName, existingCourtHours, targetCourtHours,
     nCourts, winHours, levelsCovered, levelCounts, popSize,
   } = ctx
 
@@ -612,6 +642,7 @@ function finalize(
     popularity_used: popSize > 0,
     existing_level_counts: levelCounts,
     rec_source: recSource,
+    skipped_fixed_events: skippedFixedEvents,
   }
 
   return { recommendations, stats }
