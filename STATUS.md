@@ -5,6 +5,41 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-06 — Git & gh hygiene block recovered; Pass 0 caveats corrected
+
+**State:** hygiene block **MERGED** as `9da03eb`
+([#43](https://github.com/notronwest/CourtReserve-Scheduler/pull/43)). Branch cleanup
+done. Correcting two `policy.json` caveats that the TS cutover made wrong.
+
+### ✅ Done
+- **Recovered stranded docs.** `chore/git-hygiene` was the only surviving copy of a
+  21-line **Git & gh hygiene** block for `CLAUDE.md` — its remote had been deleted
+  without merging and the content was not on `main`. Rebased onto current `main`
+  (the commit predated the whole TS rewrite), resolved the `CLAUDE.md` conflict by
+  keeping **both** main's `wmpc-block:*` sections and the new block, and merged.
+- **Branch cleanup.** Deleted `docs/status-front-door`, `docs/deployment-md` (local +
+  remote), `fix/discord-embed-1024-overflow`, `infra/bootstrap-shim` — all fully on
+  `main` (the shim's only change was byte-identical). Pruned a dead worktree.
+  Remaining: `origin/docs/status-book-guard-deployed` (someone else's, left alone).
+- **Corrected `fixed_events.python_pass0_caveat`.** Written 2026-09-01 claiming the
+  co-ed-clone defect was *production-affecting*. It no longer is: the TS cutover is
+  live and `ts/src/recommender.ts` honours the fixed-event `event_id`, so the women's
+  entries book as themselves. Rewritten as **latent / rollback-only** — `recommender.py`
+  still ignores `event_id`, so the clones return if anyone runs `ts/ops/rollback.sh`.
+- **Corrected `fixed_events.pass0_min_gap_caveat`.** It described `recommender.py`;
+  verified `ts/src/recommender.ts:489` has the same hole (Pass 0 checks only
+  `maxOccFor`, never `eventGapOk`; Pass 1/2 do check). Rescoped to **both engines**.
+
+### 🔜 Next
+- **Thursday 17:00–19:00 Intermediate is still held** — needs the real CR `event_id`
+  for "Co-Ed 3.25-3.5 Level Play"; without it a second entry resolves to `1931656` and
+  double-books with zero gap.
+- **Verify `1240908` / `1717124`** against the events list widened to **1/15/2025** (a
+  single-day fetch won't show a dormant series). Still unverified.
+- Friday women's **recurring series** still needs its 09:00 → 10:00 move by hand in CR.
+- Optional: port `event_id` to `recommender.py`, or retire the Python engine so the
+  rollback path can't reintroduce the clones.
+
 ## 2026-09-05 — `!book` overlap guard merged
 
 **State:** **MERGED** via [#36](https://github.com/notronwest/CourtReserve-Scheduler/pull/36)
