@@ -209,6 +209,7 @@ function rec(): Recommendation {
 }
 
 const STATS: Stats = {
+  skipped_fixed_events: [],
   target_date: '7/22/2026',
   day_of_week: 'Wednesday',
   existing_court_hours: 4,

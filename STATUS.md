@@ -5,6 +5,38 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-06 — Pass 0 min-gap gap FIXED in both engines
+
+**State:** on `fix/pass0-min-gap`. TS typecheck clean, **94/94 tests pass** (was 91).
+Python and the regenerated goldens agree (`regen_goldens.py --check` exits 0).
+
+### ✅ Done
+- **Pass 0 now enforces hard constraint 3b.** It gated only on
+  `_max_occ_for(eid)` / `maxOccFor(eid)` and never called `event_gap_ok` /
+  `eventGapOk`, so two fixed events resolving to the same event id at one hour — or
+  one whose id was already on the live schedule then — booked a **zero-gap duplicate**.
+  Fixed identically in `recommender.py` and `ts/src/recommender.ts`.
+- **Skips are surfaced, not silent.** A declined fixed event is reported in
+  `stats.skipped_fixed_events` with `reason: min_gap | max_occurrences`. Fixed events
+  are policy-mandated, so dropping one quietly would be its own bug.
+- **The bug was in the parity goldens.** `golden_2026-07-11` had Python booking a
+  *second* `1633147` at 10:00–12:00 on Court #3 while the live schedule already had
+  that event at 10:00–12:00 on Court #4 — proof it fired on real-shaped data, not just
+  in theory. Regenerated; that duplicate is gone and the skip is recorded.
+- **New `scripts/regen_goldens.py`.** The goldens are the reference TS is held to and
+  had no generator checked in. Now re-baselining is a command, not hand-edited JSON;
+  `--check` fails if they drift.
+- **3 regression tests** covering the duplicate, the already-on-schedule case, and that
+  a distinct `event_id` correctly lets both run.
+
+### 🔜 Next
+- **Thursday 17:00–19:00 Intermediate — the unblock is now proven.** A test shows two
+  entries at one hour DO both book once the branded one has its own `event_id`. Supply
+  the real CR id for **"Co-Ed 3.25-3.5 Level Play"** and the requested slot goes in.
+- **Deploy:** `git pull && ./setup.sh` on `wmpcMacMini1` — merging alone ships nothing.
+- Still open: verify `1240908` / `1717124` via the events list widened to 1/15/2025;
+  Friday women's series still needs its 09:00 → 10:00 move by hand in CR.
+
 ## 2026-09-06 — Git & gh hygiene block recovered; Pass 0 caveats corrected
 
 **State:** hygiene block **MERGED** as `9da03eb`
