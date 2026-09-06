@@ -11,7 +11,14 @@ import {
   buildBookingResultsEmbed,
   type BookingResult,
 } from '../src/discord/notify'
-import { parseDate, parseApproval, processMessage, type ListenerCtx } from '../src/discord/listener'
+import {
+  parseDate,
+  parseApproval,
+  processMessage,
+  resolveCourt,
+  bookWindow,
+  type ListenerCtx,
+} from '../src/discord/listener'
 import { normalizeCrResult, executeBookings, executeMove } from '../src/discord/execute'
 import { createState } from '../src/discord/state'
 import type { Stats, Recommendation, RecommendationDict } from '../src/recommender'
@@ -322,6 +329,8 @@ describe('processMessage routing', () => {
     const posted: Posted = { embeds: [], messages: [] }
     const booked: unknown[] = []
     const cr = {
+      // Empty schedule — Court #3 is free, so the confirm-time re-check passes.
+      schedule: async () => [],
       book: async (r: unknown) => {
         booked.push(r)
         return { success: true, occurrence_id: 1 }
@@ -496,5 +505,154 @@ describe('executeMove', () => {
       error: null,
     })
     expect(posted.messages.some((m) => m.includes("Couldn't find"))).toBe(true)
+  })
+})
+
+// ── !book court guard ──────────────────────────────────────────────────────────
+
+describe('resolveCourt', () => {
+  // 9/3/2026: Court #1 taken 5–7 PM, Court #4 taken 6–8 PM. #2 and #3 are free
+  // at 6 PM. This is the real schedule that produced the 2026-09-02 double-book.
+  const SCHEDULE = [
+    {
+      EventId: 111,
+      EventName: 'Mens Advanced Plus Open Play',
+      StartDateTime: '2026-09-03T17:00:00',
+      EndDateTime: '2026-09-03T19:00:00',
+      Courts: 'Court #1',
+    },
+    {
+      EventId: 222,
+      EventName: 'Co-ed Advanced Intermediate Open Play',
+      StartDateTime: '2026-09-03T18:00:00',
+      EndDateTime: '2026-09-03T20:00:00',
+      Courts: 'Court #4',
+    },
+  ]
+
+  const POLICY = { recommendation_rules: { preferred_court_when_free: 4 } }
+
+  const baseParams = {
+    event_id: 1672774,
+    event_name: 'Co-ed Advanced Intermediate Open Play',
+    level: 'Advanced Intermediate',
+    date: '9/3/2026',
+    start_time: '6:00 PM',
+    end_time: '8:00 PM',
+    extra_court_ids: [],
+    extra_court_nums: [],
+    max_participants: 0,
+    error: null,
+  }
+
+  function ctxWith(schedule: unknown[] = SCHEDULE, extra: Record<string, unknown> = {}) {
+    return makeCtx({
+      rest: makeRest({ embeds: [], messages: [] }),
+      cr: { schedule: async () => schedule, ...extra },
+      policy: POLICY,
+    })
+  }
+
+  it('picks a free court when the request named none', async () => {
+    const r = await resolveCourt(ctxWith(), { ...baseParams, court_num: null, court_id: null })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.autoPicked).toBe(true)
+    // #4 is preferred but busy at 6 PM, so the next free ascending court wins.
+    expect(r.params.court_num).toBe(2)
+    expect(r.params.court_id).toBe(52350)
+  })
+
+  it('rejects a named court that overlaps an existing booking', async () => {
+    const r = await resolveCourt(ctxWith(), { ...baseParams, court_num: 1, court_id: 52349 })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.message).toContain('Already booked')
+    expect(r.message).toContain('Mens Advanced Plus Open Play')
+    // …and points at somewhere that actually works.
+    expect(r.message).toContain('Court #2')
+  })
+
+  it('allows a named court that is genuinely free', async () => {
+    const r = await resolveCourt(ctxWith(), { ...baseParams, court_num: 3, court_id: 52351 })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.autoPicked).toBe(false)
+    expect(r.params.court_num).toBe(3)
+  })
+
+  it('rejects when any court in a multi-court request is taken', async () => {
+    const r = await resolveCourt(ctxWith(), {
+      ...baseParams,
+      court_num: 3,
+      court_id: 52351,
+      extra_court_nums: [4],
+      extra_court_ids: [52352],
+    })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.message).toContain('Court #4')
+  })
+
+  it('touching times do not count as an overlap', async () => {
+    // Court #1 frees up at 7 PM; a 7–9 PM booking on it is fine.
+    const r = await resolveCourt(ctxWith(), {
+      ...baseParams,
+      start_time: '7:00 PM',
+      end_time: '9:00 PM',
+      court_num: 1,
+      court_id: 52349,
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it('reports every court busy rather than picking one anyway', async () => {
+    const full = [1, 2, 3, 4].map((cn) => ({
+      EventId: cn,
+      EventName: `Booking ${cn}`,
+      StartDateTime: '2026-09-03T18:00:00',
+      EndDateTime: '2026-09-03T20:00:00',
+      Courts: `Court #${cn}`,
+    }))
+    const r = await resolveCourt(ctxWith(full), { ...baseParams, court_num: null, court_id: null })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.message).toContain('Every court is booked')
+  })
+
+  it('fails closed when the schedule cannot be fetched', async () => {
+    const ctx = makeCtx({
+      rest: makeRest({ embeds: [], messages: [] }),
+      cr: {
+        schedule: async () => {
+          throw new Error('courtreserve-api down')
+        },
+      },
+      policy: POLICY,
+    })
+    const r = await resolveCourt(ctx, { ...baseParams, court_num: null, court_id: null })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.message).toContain('Not booking')
+  })
+
+  it('ignores events on another date', async () => {
+    const otherDay = [{ ...SCHEDULE[0], StartDateTime: '2026-09-04T17:00:00', EndDateTime: '2026-09-04T19:00:00' }]
+    const r = await resolveCourt(ctxWith(otherDay), { ...baseParams, court_num: 1, court_id: 52349 })
+    expect(r.ok).toBe(true)
+  })
+})
+
+describe('bookWindow', () => {
+  it('parses a 12-hour window into naive datetimes', () => {
+    const w = bookWindow({ date: '9/3/2026', start_time: '6:00 PM', end_time: '8:00 PM' })
+    expect(w).not.toBeNull()
+    expect(w!.ymd).toBe('2026-09-03')
+    expect(w!.start.formatTime()).toBe('6:00 PM')
+    expect(w!.end.formatTime()).toBe('8:00 PM')
+  })
+
+  it('returns null on unparseable input', () => {
+    expect(bookWindow({ date: 'nope', start_time: '6:00 PM', end_time: '8:00 PM' })).toBeNull()
   })
 })

@@ -54,6 +54,7 @@ reachable ad hoc but not what the 8 AM agent runs.
 | `none` / `skip` | Skip all recommendations |
 | `!schedule 5/7` | Generate recommendations for any date |
 | `!book Intermediate 5/7 at 2pm Court 3` | Ad-hoc booking (shows preview, confirm to book) |
+| `!book Intermediate 5/7 at 2pm` | Same, but **the court is auto-picked** from whatever is free |
 | `!move Intermediate 5/7 from 9am to 11am` | Move an existing occurrence |
 | `!help` | Show all commands |
 
@@ -70,7 +71,9 @@ reachable ad hoc but not what the 8 AM agent runs.
 
 ## Hard Constraints (policy.json)
 
-1. No same-court overlap with existing events
+1. No same-court overlap with existing events — enforced on **both** the daily
+   recommender and the ad-hoc `!book` path (`resolveCourt` in `discord/listener.ts`,
+   sharing `availability.ts` with the recommender). `!move` does **not** check this yet.
 2. One primary court per recommended booking
 3. Max 2 occurrences of same event per day
 4. **2-hour minimum gap between same-event occurrences** (no back-to-back)

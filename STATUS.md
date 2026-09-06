@@ -5,6 +5,45 @@
 > and the GitHub issues/PRs linked below.
 
 ---
+## 2026-09-05 — `!book` overlap guard merged
+
+**State:** **MERGED** via [#36](https://github.com/notronwest/CourtReserve-Scheduler/pull/36)
+(closes [#39](https://github.com/notronwest/CourtReserve-Scheduler/issues/39)). Found
+while diagnosing the scheduler regression two entries below. Supersedes the "`!book`
+still unguarded in production" caveat in the entry below — that gap is now closed.
+**Not yet on the host:** the listener needs a `git pull` + restart to pick it up.
+
+### What broke
+`!book Advanced Intermediate tomorrow @ 6PM` (no court named) booked **Court #1 on
+9/3 6–8 PM**, on top of *Mens Advanced Plus Open Play* already there 5–7 PM.
+
+`parseBookCommand` is a **pure text parser** — it sees `policy.json` and nothing
+else, never the live schedule. With no court named, Haiku had no basis to choose
+and returned the first court in the list. The only validation was "is this court
+id in policy.json"; there was no overlap check anywhere on the path, at preview
+or at confirm. Hard constraint #1 was enforced on the recommender path
+(`recommender.ts` `existingFree`) and simply absent here.
+
+### ✅ Done
+- **New `ts/src/availability.ts`** — `occupiedSlots` / `conflictsFor` /
+  `freeCourts`, extracted from the recommender's private parse block so both
+  paths answer "is this court free?" the same way. `recommender.ts` now imports
+  it; the parity suite still passes unchanged.
+- **The parser no longer invents a court.** No court named → `court_num`/`court_id`
+  come back `null`, and the booker fills them in.
+- **`resolveCourt` in the listener** picks a free court (recommender's preference
+  order) when none was named, and rejects a named court that overlaps — naming
+  the conflicting event and suggesting the courts that *are* free.
+- **Re-checked at confirm**, not just at preview: a preview can be minutes stale.
+- **Fails closed.** If the schedule can't be fetched, the booking is refused —
+  booking blind is exactly how this happened.
+- 12 new tests (91 total, was 79), built on the real 9/3 schedule.
+
+### ⚠️ Same bug still live in `!move`
+`executeMove` changes an occurrence's time with **no check that the new slot is
+free on that court** — it can move an event on top of another. Not fixed here:
+the conflict set has to exclude the occurrence being moved, and the court-change
+half of `!move` is already a known no-op pending Phase 5. Filed separately.
 ## 2026-09-03 — TS cutover DEPLOYED; daily auto-book confirmed working
 
 **State:** **LIVE on `wmpcMacMini1`.** [#35](https://github.com/notronwest/CourtReserve-Scheduler/pull/35)
