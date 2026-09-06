@@ -76,6 +76,46 @@ done. Correcting two `policy.json` caveats that the TS cutover made wrong.
 - Optional: port `event_id` to `recommender.py`, or retire the Python engine so the
   rollback path can't reintroduce the clones.
 
+## 2026-09-05 — `!book` guard DEPLOYED; PRs must close a board issue
+
+**State:** **LIVE on `wmpcMacMini1`** at `ae03181`. Supersedes the "Not yet on the
+host" caveat in the entry below — the guard is running.
+
+### ✅ Done
+- **[#36](https://github.com/notronwest/CourtReserve-Scheduler/pull/36) (`ae03181`)
+  and [#38](https://github.com/notronwest/CourtReserve-Scheduler/pull/38) (`0c9c45e`)
+  merged**, closing [#39](https://github.com/notronwest/CourtReserve-Scheduler/issues/39)
+  and [#40](https://github.com/notronwest/CourtReserve-Scheduler/issues/40).
+- **Deployed by `git pull` + listener restart — no `./setup.sh`.** #36 is TS source
+  only and changes no plist, so the always-on listener was the only thing needing a
+  bounce (the cron-style jobs spawn fresh and pick up new code on their own).
+  Listener came up clean, empty error log, and **`npm test` passes 91/91 on the host.**
+- **The daily job has now auto-booked three consecutive days unattended:**
+  9/17 (7/7), 9/18 (9/9), 9/19 (6/6) — zero failures, no human in the loop.
+
+### 📌 Convention learned the hard way
+**Every PR must CLOSE a board issue** — a CI check greps the body for a closing
+keyword (`Closes #n` / `Fixes` / `Resolves`) and fails the PR without one. `Part of
+#n` does not count. #35, #36 and #38 were all opened without one and had to be
+retro-fitted with tracking issues; **#35 was merged red.** Open the issue *first*,
+then the PR. Prerequisite work gets its own small tracking issue.
+
+### 🔜 Next — one cleanup PR for three Python-era ops warts
+All three are ops scripts still probing the dead Python path. None affects booking:
+1. **`setup.sh` step 8** hits a `read -p` with no TTY, so `set -euo pipefail` aborts
+   the run (exit 1) *after* the plists install, skipping the step 9 smoke test. It
+   asks for a browser login the TS jobs don't use — CR goes through `courtreserve-api`.
+   Should skip when there's no TTY.
+2. **`check.sh`** fails on "Playwright Chromium missing" (rollback path only), reads
+   the stale Python `logs/listener.log` instead of `launchd_listener.log`, and its
+   "Latest booking log" line prints garbled output and `-1`.
+3. **`make restart`** ends in `tail -f logs/listener.log` — the Python log. It hangs
+   by design and shows a file the live TS listener never writes to.
+
+Also still open: [#37](https://github.com/notronwest/CourtReserve-Scheduler/issues/37)
+— `!move` can still retime an event on top of another (board: Backlog, Soon, bug).
+
+---
 ## 2026-09-05 — `!book` overlap guard merged
 
 **State:** **MERGED** via [#36](https://github.com/notronwest/CourtReserve-Scheduler/pull/36)
